@@ -183,6 +183,7 @@ name = "basalt-widgets"
 version = "0.0.0"
 dependencies = [
  "basalt",
+ "parking_lot",
 ]
 
 [[package]]

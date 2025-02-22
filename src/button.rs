@@ -2,7 +2,9 @@ use std::sync::Arc;
 use std::sync::atomic::{self, AtomicBool};
 
 use basalt::input::MouseButton;
-use basalt::interface::{Bin, BinPosition, BinStyle, TextHoriAlign, TextVertAlign, TextWrap};
+use basalt::interface::{
+    Bin, BinPosition, BinStyle, Color, TextHoriAlign, TextVertAlign, TextWrap,
+};
 
 use crate::builder::WidgetBuilder;
 use crate::{Theme, WidgetParent};
@@ -66,100 +68,12 @@ impl ButtonBuilder {
             container,
         });
 
-        let cursor_inside = Arc::new(AtomicBool::new(false));
-        let button_pressed = Arc::new(AtomicBool::new(false));
-
-        let cb_button = button.clone();
-        let cb_cursor_inside = cursor_inside.clone();
-        let cb_button_pressed = button_pressed.clone();
-
-        button.container.on_enter(move |_, _| {
-            cb_cursor_inside.store(true, atomic::Ordering::SeqCst);
-
-            if !cb_button_pressed.load(atomic::Ordering::SeqCst) {
-                cb_button
-                    .container
-                    .style_update(BinStyle {
-                        back_color: Some(cb_button.theme.colors.accent1),
-                        text_color: Some(cb_button.theme.colors.text2),
-                        ..cb_button.container.style_copy()
-                    })
-                    .expect_valid();
-            }
-
-            Default::default()
-        });
-
-        let cb_button = button.clone();
-        let cb_cursor_inside = cursor_inside.clone();
-        let cb_button_pressed = button_pressed.clone();
-
-        button.container.on_leave(move |_, _| {
-            cb_cursor_inside.store(false, atomic::Ordering::SeqCst);
-
-            if !cb_button_pressed.load(atomic::Ordering::SeqCst) {
-                cb_button
-                    .container
-                    .style_update(BinStyle {
-                        back_color: Some(cb_button.theme.colors.back2),
-                        text_color: Some(cb_button.theme.colors.text1),
-                        ..cb_button.container.style_copy()
-                    })
-                    .expect_valid();
-            }
-
-            Default::default()
-        });
-
-        let cb_button = button.clone();
-        let cb_button_pressed = button_pressed.clone();
-
-        button
-            .container
-            .on_press(MouseButton::Left, move |_, _, _| {
-                cb_button_pressed.store(true, atomic::Ordering::SeqCst);
-
-                cb_button
-                    .container
-                    .style_update(BinStyle {
-                        back_color: Some(cb_button.theme.colors.accent2),
-                        ..cb_button.container.style_copy()
-                    })
-                    .expect_valid();
-
-                Default::default()
-            });
-
-        let cb_button = button.clone();
-        let cb_cursor_inside = cursor_inside;
-        let cb_button_pressed = button_pressed;
-
-        button
-            .container
-            .on_release(MouseButton::Left, move |_, _, _| {
-                cb_button_pressed.store(false, atomic::Ordering::SeqCst);
-
-                if cb_cursor_inside.load(atomic::Ordering::SeqCst) {
-                    cb_button
-                        .container
-                        .style_update(BinStyle {
-                            back_color: Some(cb_button.theme.colors.accent1),
-                            ..cb_button.container.style_copy()
-                        })
-                        .expect_valid();
-                } else {
-                    cb_button
-                        .container
-                        .style_update(BinStyle {
-                            back_color: Some(cb_button.theme.colors.back2),
-                            text_color: Some(cb_button.theme.colors.text1),
-                            ..cb_button.container.style_copy()
-                        })
-                        .expect_valid();
-                }
-
-                Default::default()
-            });
+        button_hooks(
+            &button.container,
+            [button.theme.colors.back3, button.theme.colors.text1a],
+            [button.theme.colors.accent1, button.theme.colors.text1b],
+            [button.theme.colors.accent2, button.theme.colors.text1b],
+        );
 
         button.style_update();
         button
@@ -182,10 +96,10 @@ impl Button {
             margin_b: Some(self.theme.spacing),
             margin_l: Some(self.theme.spacing),
             margin_r: Some(self.theme.spacing),
-            back_color: Some(self.theme.colors.back2),
+            back_color: Some(self.theme.colors.back3),
             text: self.props.text.clone(),
             text_height: Some(text_height),
-            text_color: Some(self.theme.colors.text1),
+            text_color: Some(self.theme.colors.text1a),
             text_hori_align: Some(TextHoriAlign::Center),
             text_vert_align: Some(TextVertAlign::Center),
             text_wrap: Some(TextWrap::None),
@@ -244,4 +158,100 @@ impl Button {
 
         self.container.style_update(container_style).expect_valid();
     }
+}
+
+pub(crate) fn button_hooks(
+    button: &Arc<Bin>,
+    colors: [Color; 2],
+    hover_colors: [Color; 2],
+    press_colors: [Color; 2],
+) {
+    let cursor_inside = Arc::new(AtomicBool::new(false));
+    let button_pressed = Arc::new(AtomicBool::new(false));
+
+    let cb_cursor_inside = cursor_inside.clone();
+    let cb_button_pressed = button_pressed.clone();
+
+    button.on_enter(move |target, _| {
+        cb_cursor_inside.store(true, atomic::Ordering::SeqCst);
+        let button = target.into_bin().unwrap();
+
+        if !cb_button_pressed.load(atomic::Ordering::SeqCst) {
+            let mut style = button.style_copy();
+            style.back_color = Some(hover_colors[0]);
+            style.text_color = Some(hover_colors[1]);
+            style
+                .custom_verts
+                .iter_mut()
+                .for_each(|vert| vert.color = hover_colors[1]);
+            button.style_update(style).expect_valid();
+        }
+
+        Default::default()
+    });
+
+    let cb_cursor_inside = cursor_inside.clone();
+    let cb_button_pressed = button_pressed.clone();
+
+    button.on_leave(move |target, _| {
+        cb_cursor_inside.store(false, atomic::Ordering::SeqCst);
+        let button = target.into_bin().unwrap();
+
+        if !cb_button_pressed.load(atomic::Ordering::SeqCst) {
+            let mut style = button.style_copy();
+            style.back_color = Some(colors[0]);
+            style.text_color = Some(colors[1]);
+            style
+                .custom_verts
+                .iter_mut()
+                .for_each(|vert| vert.color = colors[1]);
+            button.style_update(style).expect_valid();
+        }
+
+        Default::default()
+    });
+
+    let cb_button_pressed = button_pressed.clone();
+
+    button.on_press(MouseButton::Left, move |target, _, _| {
+        cb_button_pressed.store(true, atomic::Ordering::SeqCst);
+        let button = target.into_bin().unwrap();
+        let mut style = button.style_copy();
+        style.back_color = Some(press_colors[0]);
+        style.text_color = Some(press_colors[1]);
+        style
+            .custom_verts
+            .iter_mut()
+            .for_each(|vert| vert.color = press_colors[1]);
+        button.style_update(style).expect_valid();
+        Default::default()
+    });
+
+    let cb_cursor_inside = cursor_inside;
+    let cb_button_pressed = button_pressed;
+
+    button.on_release(MouseButton::Left, move |target, _, _| {
+        cb_button_pressed.store(false, atomic::Ordering::SeqCst);
+        let button = target.into_bin().unwrap();
+        let mut style = button.style_copy();
+
+        if cb_cursor_inside.load(atomic::Ordering::SeqCst) {
+            style.back_color = Some(hover_colors[0]);
+            style.text_color = Some(hover_colors[1]);
+            style
+                .custom_verts
+                .iter_mut()
+                .for_each(|vert| vert.color = hover_colors[1]);
+        } else {
+            style.back_color = Some(colors[0]);
+            style.text_color = Some(colors[1]);
+            style
+                .custom_verts
+                .iter_mut()
+                .for_each(|vert| vert.color = colors[1]);
+        }
+
+        button.style_update(style).expect_valid();
+        Default::default()
+    });
 }

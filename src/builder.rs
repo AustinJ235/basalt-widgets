@@ -3,7 +3,7 @@ use std::sync::Arc;
 use basalt::interface::Bin;
 use basalt::window::Window;
 
-use crate::{ButtonBuilder, Theme, WidgetParent};
+use crate::{ButtonBuilder, SpinButtonBuilder, Theme, WidgetParent};
 
 pub struct WidgetBuilder {
     pub(crate) parent: WidgetParent,
@@ -32,5 +32,9 @@ impl WidgetBuilder {
 
     pub fn button(self) -> ButtonBuilder {
         ButtonBuilder::with_builder(self)
+    }
+
+    pub fn spin_button(self) -> SpinButtonBuilder {
+        SpinButtonBuilder::with_builder(self)
     }
 }

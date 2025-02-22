@@ -37,23 +37,29 @@ impl Default for Theme {
 pub struct ThemeColors {
     pub back1: Color,
     pub back2: Color,
+    pub back3: Color,
+    pub back4: Color,
     pub accent1: Color,
     pub accent2: Color,
-    pub text1: Color,
-    pub text2: Color,
+    pub text1a: Color,
+    pub text1b: Color,
     pub border1: Color,
+    pub border2: Color,
 }
 
 impl ThemeColors {
     pub fn light() -> Self {
         Self {
-            back1: Color::shex("EDEDEE"),
-            back2: Color::shex("F4F5F5"),
-            accent1: Color::shex("f9787f"),
-            accent2: Color::shex("EB6B73"),
-            text1: Color::shex("8F9194"),
-            text2: Color::shex("EDEDEE"),
-            border1: Color::shex("C2C3C3"),
+            back1: Color::shex("fae5ee"),
+            back2: Color::shex("f4e1ea"),
+            back3: Color::shex("e0ced6"),
+            back4: Color::shex("d4c2ca"),
+            accent1: Color::shex("ff0071"),
+            accent2: Color::shex("f2006c"),
+            text1a: Color::shex("261d21"),
+            text1b: Color::shex("fae5ee"),
+            border1: Color::shex("5e585b"),
+            border2: Color::shex("685e63"),
         }
     }
 

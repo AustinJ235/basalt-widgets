@@ -1,5 +1,6 @@
 mod builder;
 mod button;
+mod spin_button;
 mod theme;
 
 use std::sync::Arc;
@@ -9,6 +10,7 @@ use basalt::window::Window;
 
 pub use self::builder::WidgetBuilder;
 pub use self::button::{Button, ButtonBuilder};
+pub use self::spin_button::{SpinButton, SpinButtonBuilder, SpinButtonError};
 pub use self::theme::{Theme, ThemeColors};
 
 pub trait Container {

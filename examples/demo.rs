@@ -1,4 +1,4 @@
-use basalt::interface::BinStyle;
+use basalt::interface::{BinStyle, ChildFloatMode};
 use basalt::render::{Renderer, RendererError};
 use basalt::window::WindowOptions;
 use basalt::{Basalt, BasaltOptions};
@@ -27,11 +27,21 @@ fn main() {
                 pos_from_l: Some(0.0),
                 pos_from_r: Some(0.0),
                 back_color: Some(theme.colors.back1),
+                child_float_mode: Some(ChildFloatMode::Column),
                 ..BinStyle::default()
             })
             .expect_valid();
 
         let _button = background.create_widget().button().text("Button").build();
+
+        let _spin_button = background
+            .create_widget()
+            .spin_button()
+            .max_value(100)
+            .medium_step(5)
+            .large_step(10)
+            .build()
+            .unwrap();
 
         let mut renderer = Renderer::new(window).unwrap();
         renderer.interface_only();
