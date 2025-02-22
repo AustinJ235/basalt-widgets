@@ -290,7 +290,7 @@ impl SpinButtonBuilder {
                     .container
                     .basalt_ref()
                     .input_ref()
-                    .set_bin_focused(&cb_spin_button.container);
+                    .clear_bin_focus(cb_spin_button.container.window().unwrap().id());
             } else if c.is_backspace() {
                 let mut entry_style = cb_spin_button.entry.style_copy();
                 entry_style.text.pop();

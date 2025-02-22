@@ -105,6 +105,7 @@ impl ToggleButtonBuilder {
                 let mut style = cb_toggle_button.container.style_copy();
                 style.back_color = Some(cb_toggle_button.theme.colors.accent1);
                 style.text_color = Some(cb_toggle_button.theme.colors.text1b);
+
                 cb_toggle_button
                     .container
                     .style_update(style)
@@ -128,6 +129,7 @@ impl ToggleButtonBuilder {
                 let mut style = cb_toggle_button.container.style_copy();
                 style.back_color = Some(cb_toggle_button.theme.colors.back3);
                 style.text_color = Some(cb_toggle_button.theme.colors.text1a);
+
                 cb_toggle_button
                     .container
                     .style_update(style)
@@ -162,6 +164,7 @@ impl ToggleButtonBuilder {
                     .container
                     .style_update(style)
                     .expect_valid();
+
                 Default::default()
             });
 
