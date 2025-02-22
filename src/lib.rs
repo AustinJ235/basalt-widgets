@@ -2,6 +2,7 @@ mod builder;
 mod button;
 mod spin_button;
 mod theme;
+mod toggle_button;
 
 use std::sync::Arc;
 
@@ -12,6 +13,7 @@ pub use self::builder::WidgetBuilder;
 pub use self::button::{Button, ButtonBuilder};
 pub use self::spin_button::{SpinButton, SpinButtonBuilder, SpinButtonError};
 pub use self::theme::{Theme, ThemeColors};
+pub use self::toggle_button::{ToggleButton, ToggleButtonBuilder};
 
 pub trait Container {
     fn create_widget(&self) -> WidgetBuilder;

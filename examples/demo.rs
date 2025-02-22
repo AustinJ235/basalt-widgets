@@ -43,6 +43,13 @@ fn main() {
             .build()
             .unwrap();
 
+        let _toggle_button = background
+            .create_widget()
+            .toggle_button()
+            .enabled_text("On")
+            .disabled_text("Off")
+            .build();
+
         let mut renderer = Renderer::new(window).unwrap();
         renderer.interface_only();
 
