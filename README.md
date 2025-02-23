@@ -1,0 +1,2 @@
+#### This repo's existance is temporary. Eventually it'll hopefully be added into [basalt](https://github.com/AustinJ235/basalt) itself.
+#### These widgets are created as a proof of concept and may not work outside of demo use.
