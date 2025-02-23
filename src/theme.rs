@@ -45,6 +45,7 @@ pub struct ThemeColors {
     pub text1b: Color,
     pub border1: Color,
     pub border2: Color,
+    pub border3: Color,
 }
 
 impl ThemeColors {
@@ -60,6 +61,7 @@ impl ThemeColors {
             text1b: Color::shex("fae5ee"),
             border1: Color::shex("5e585b"),
             border2: Color::shex("685e63"),
+            border3: Color::shex("72656b"),
         }
     }
 

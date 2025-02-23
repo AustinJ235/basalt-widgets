@@ -1,5 +1,5 @@
 use basalt::interface::{BinStyle, ChildFloatMode};
-use basalt::render::{Renderer, RendererError};
+use basalt::render::{MSAA, Renderer, RendererError};
 use basalt::window::WindowOptions;
 use basalt::{Basalt, BasaltOptions};
 use basalt_widgets::{Container, Theme};
@@ -50,8 +50,11 @@ fn main() {
             .disabled_text("Off")
             .build();
 
+        let _switch_button = background.create_widget().switch_button().build();
+
         let mut renderer = Renderer::new(window).unwrap();
-        renderer.interface_only();
+
+        renderer.interface_only().msaa(MSAA::X8);
 
         match renderer.run() {
             Ok(_) | Err(RendererError::Closed) => (),
