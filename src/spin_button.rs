@@ -167,15 +167,15 @@ impl SpinButtonBuilder {
             &spin_button.sub_button,
             [
                 spin_button.theme.colors.back3,
-                spin_button.theme.colors.text1a,
+                spin_button.theme.colors.border2,
             ],
             [
                 spin_button.theme.colors.accent1,
-                spin_button.theme.colors.text1b,
+                spin_button.theme.colors.back2,
             ],
             [
                 spin_button.theme.colors.accent2,
-                spin_button.theme.colors.text1b,
+                spin_button.theme.colors.back2,
             ],
         );
 
@@ -183,15 +183,15 @@ impl SpinButtonBuilder {
             &spin_button.add_button,
             [
                 spin_button.theme.colors.back3,
-                spin_button.theme.colors.text1a,
+                spin_button.theme.colors.border2,
             ],
             [
                 spin_button.theme.colors.accent1,
-                spin_button.theme.colors.text1b,
+                spin_button.theme.colors.back2,
             ],
             [
                 spin_button.theme.colors.accent2,
-                spin_button.theme.colors.text1b,
+                spin_button.theme.colors.back2,
             ],
         );
 
@@ -418,7 +418,7 @@ impl SpinButton {
             custom_verts: sub_symbol_verts(
                 text_height,
                 self.theme.spacing,
-                self.theme.colors.text1a,
+                self.theme.colors.border2,
             ),
             ..Default::default()
         };
@@ -433,7 +433,7 @@ impl SpinButton {
             custom_verts: add_symbol_verts(
                 text_height,
                 self.theme.spacing,
-                self.theme.colors.text1a,
+                self.theme.colors.border2,
             ),
             ..Default::default()
         };
@@ -534,8 +534,8 @@ impl SpinButton {
 fn sub_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
     let h_bar_l = spacing + 1.0;
     let h_bar_r = spacing + target_size - 1.0;
-    let h_bar_t = spacing + ((target_size / 2.0) - 0.5);
-    let h_bar_b = h_bar_t + 1.0;
+    let h_bar_t = spacing + ((target_size / 2.0) - 1.0);
+    let h_bar_b = h_bar_t + 2.0;
     let mut verts = Vec::with_capacity(6);
 
     for [x, y] in [
@@ -556,14 +556,14 @@ fn sub_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert
 }
 
 fn add_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
-    let v_bar_l = spacing + ((target_size / 2.0) - 0.5);
-    let v_bar_r = v_bar_l + 1.0;
+    let v_bar_l = spacing + ((target_size / 2.0) - 1.0);
+    let v_bar_r = v_bar_l + 2.0;
     let v_bar_t = spacing;
     let v_bar_b = spacing + target_size;
     let h_bar_l = spacing;
     let h_bar_r = spacing + target_size;
-    let h_bar_t = spacing + ((target_size / 2.0) - 0.5);
-    let h_bar_b = h_bar_t + 1.0;
+    let h_bar_t = spacing + ((target_size / 2.0) - 1.0);
+    let h_bar_b = h_bar_t + 2.0;
     let mut verts = Vec::with_capacity(12);
 
     for [x, y] in [
