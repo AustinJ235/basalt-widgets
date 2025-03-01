@@ -4,7 +4,8 @@ use basalt::interface::Bin;
 use basalt::window::Window;
 
 use crate::{
-    ButtonBuilder, SpinButtonBuilder, SwitchButtonBuilder, Theme, ToggleButtonBuilder, WidgetParent,
+    ButtonBuilder, HoriScalerBuilder, SpinButtonBuilder, SwitchButtonBuilder, Theme,
+    ToggleButtonBuilder, WidgetParent,
 };
 
 pub struct WidgetBuilder {
@@ -46,5 +47,9 @@ impl WidgetBuilder {
 
     pub fn switch_button(self) -> SwitchButtonBuilder {
         SwitchButtonBuilder::with_builder(self)
+    }
+
+    pub fn hori_scaler(self) -> HoriScalerBuilder {
+        HoriScalerBuilder::with_builder(self)
     }
 }

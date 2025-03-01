@@ -1,5 +1,6 @@
 mod builder;
 mod button;
+mod hori_scaler;
 mod spin_button;
 mod switch_button;
 mod theme;
@@ -12,6 +13,7 @@ use basalt::window::Window;
 
 pub use self::builder::WidgetBuilder;
 pub use self::button::{Button, ButtonBuilder};
+pub use self::hori_scaler::{HoriScaler, HoriScalerBuilder, ScalerRound};
 pub use self::spin_button::{SpinButton, SpinButtonBuilder, SpinButtonError};
 pub use self::switch_button::{SwitchButton, SwitchButtonBuilder};
 pub use self::theme::{Theme, ThemeColors};

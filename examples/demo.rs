@@ -52,6 +52,16 @@ fn main() {
 
         let _switch_button = background.create_widget().switch_button().build();
 
+        let _hori_scaler = background
+            .create_widget()
+            .hori_scaler()
+            .max_value(100.0)
+            .small_step(1.0)
+            .medium_step(5.0)
+            .large_step(10.0)
+            .build()
+            .unwrap();
+
         let mut renderer = Renderer::new(window).unwrap();
 
         renderer.interface_only().msaa(MSAA::X8);
