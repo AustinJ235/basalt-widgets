@@ -377,7 +377,7 @@ impl HoriScaler {
             ..Default::default()
         };
 
-        let track_style = BinStyle {
+        let mut track_style = BinStyle {
             position: Some(BinPosition::Parent),
             pos_from_t: Some(widget_height_1_4),
             pos_from_b: Some(widget_height_1_4),
@@ -401,7 +401,7 @@ impl HoriScaler {
             ..Default::default()
         };
 
-        let knob_style = BinStyle {
+        let mut knob_style = BinStyle {
             position: Some(BinPosition::Parent),
             pos_from_t: Some(0.0),
             pos_from_b: Some(0.0),
@@ -414,6 +414,25 @@ impl HoriScaler {
             border_radius_br: Some(widget_height_1_2),
             ..Default::default()
         };
+
+        if let Some(border_size) = self.theme.border {
+            track_style.border_size_t = Some(border_size);
+            track_style.border_size_b = Some(border_size);
+            track_style.border_size_l = Some(border_size);
+            track_style.border_size_r = Some(border_size);
+            track_style.border_color_t = Some(self.theme.colors.border1);
+            track_style.border_color_b = Some(self.theme.colors.border1);
+            track_style.border_color_l = Some(self.theme.colors.border1);
+            track_style.border_color_r = Some(self.theme.colors.border1);
+            knob_style.border_size_t = Some(border_size);
+            knob_style.border_size_b = Some(border_size);
+            knob_style.border_size_l = Some(border_size);
+            knob_style.border_size_r = Some(border_size);
+            knob_style.border_color_t = Some(self.theme.colors.border3);
+            knob_style.border_color_b = Some(self.theme.colors.border3);
+            knob_style.border_color_l = Some(self.theme.colors.border3);
+            knob_style.border_color_r = Some(self.theme.colors.border3);
+        }
 
         self.container.style_update(container_style).expect_valid();
         self.track.style_update(track_style).expect_valid();
