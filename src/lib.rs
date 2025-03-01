@@ -1,4 +1,6 @@
-mod builder;
+pub mod builder;
+pub mod error;
+
 mod button;
 mod hori_scaler;
 mod spin_button;
@@ -11,13 +13,13 @@ use std::sync::Arc;
 use basalt::interface::Bin;
 use basalt::window::Window;
 
-pub use self::builder::WidgetBuilder;
-pub use self::button::{Button, ButtonBuilder};
-pub use self::hori_scaler::{HoriScaler, HoriScalerBuilder, ScalerRound};
-pub use self::spin_button::{SpinButton, SpinButtonBuilder, SpinButtonError};
-pub use self::switch_button::{SwitchButton, SwitchButtonBuilder};
+use self::builder::WidgetBuilder;
+pub use self::button::Button;
+pub use self::hori_scaler::{HoriScaler, ScalerRound};
+pub use self::spin_button::SpinButton;
+pub use self::switch_button::SwitchButton;
 pub use self::theme::{Theme, ThemeColors};
-pub use self::toggle_button::{ToggleButton, ToggleButtonBuilder};
+pub use self::toggle_button::ToggleButton;
 
 pub trait Container {
     fn create_widget(&self) -> WidgetBuilder;

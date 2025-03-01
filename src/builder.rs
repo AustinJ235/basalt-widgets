@@ -3,10 +3,12 @@ use std::sync::Arc;
 use basalt::interface::Bin;
 use basalt::window::Window;
 
-use crate::{
-    ButtonBuilder, HoriScalerBuilder, SpinButtonBuilder, SwitchButtonBuilder, Theme,
-    ToggleButtonBuilder, WidgetParent,
-};
+pub use crate::button::ButtonBuilder;
+pub use crate::hori_scaler::HoriScalerBuilder;
+pub use crate::spin_button::SpinButtonBuilder;
+pub use crate::switch_button::SwitchButtonBuilder;
+pub use crate::toggle_button::ToggleButtonBuilder;
+use crate::{Theme, WidgetParent};
 
 pub struct WidgetBuilder {
     pub(crate) parent: WidgetParent,
