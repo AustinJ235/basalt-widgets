@@ -1,17 +1,21 @@
+use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::atomic::{self, AtomicBool};
 
-use basalt::input::MouseButton;
+use basalt::input::{MouseButton, WindowState};
 use basalt::interface::{
     Bin, BinPosition, BinStyle, Color, TextHoriAlign, TextVertAlign, TextWrap,
 };
+use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
 use crate::{Theme, WidgetParent};
 
+/// Builder for [`Button`]
 pub struct ButtonBuilder {
     widget: WidgetBuilder,
     props: Properties,
+    on_press: Vec<Box<dyn FnMut(&Arc<Button>) + Send + 'static>>,
 }
 
 #[derive(Default)]
@@ -27,9 +31,11 @@ impl ButtonBuilder {
         Self {
             widget: builder,
             props: Default::default(),
+            on_press: Vec::new(),
         }
     }
 
+    /// Set the text.
     pub fn text<T>(mut self, text: T) -> Self
     where
         T: Into<String>,
@@ -38,41 +44,68 @@ impl ButtonBuilder {
         self
     }
 
+    /// **Temporary**
     pub fn width(mut self, width: f32) -> Self {
         self.props.width = Some(width);
         self
     }
 
+    /// **Temporary**
     pub fn height(mut self, height: f32) -> Self {
         self.props.height = Some(height);
         self
     }
 
+    /// **Temporary**
     pub fn text_height(mut self, text_height: f32) -> Self {
         self.props.text_height = Some(text_height);
         self
     }
 
+    /// Add a callback to be called when the [`Button`] is pressed.
+    ///
+    /// **Panics**: When adding a callback within the callback.
+    pub fn on_press<F>(mut self, on_press: F) -> Self
+    where
+        F: FnMut(&Arc<Button>) + Send + 'static,
+    {
+        self.on_press.push(Box::new(on_press));
+        self
+    }
+
+    /// Finish building the [`Button`].
     pub fn build(self) -> Arc<Button> {
         let window = self.widget.parent.window();
         let container = window.new_bin();
 
         match &self.widget.parent {
             WidgetParent::Bin(parent) => parent.add_child(container.clone()),
-            _ => (),
+            _ => unimplemented!(),
         }
 
         let button = Arc::new(Button {
             theme: self.widget.theme,
             props: self.props,
             container,
+            state: ReentrantMutex::new(State {
+                on_press: RefCell::new(self.on_press),
+            }),
         });
+
+        let cb_button = button.clone();
 
         button_hooks(
             &button.container,
             [button.theme.colors.back3, button.theme.colors.text1a],
             [button.theme.colors.accent1, button.theme.colors.text1b],
             [button.theme.colors.accent2, button.theme.colors.text1b],
+            move |_| {
+                let state = cb_button.state.lock();
+
+                for on_press in state.on_press.borrow_mut().iter_mut() {
+                    on_press(&cb_button);
+                }
+            },
         );
 
         button.style_update();
@@ -80,13 +113,33 @@ impl ButtonBuilder {
     }
 }
 
+/// Button widget.
 pub struct Button {
     theme: Theme,
     props: Properties,
     container: Arc<Bin>,
+    state: ReentrantMutex<State>,
+}
+
+struct State {
+    on_press: RefCell<Vec<Box<dyn FnMut(&Arc<Button>) + Send + 'static>>>,
 }
 
 impl Button {
+    /// Add a callback to be called when the [`Button`] is pressed.
+    ///
+    /// **Panics**: When adding a callback within the callback.
+    pub fn on_press<F>(&self, on_press: F)
+    where
+        F: FnMut(&Arc<Button>) + Send + 'static,
+    {
+        self.state
+            .lock()
+            .on_press
+            .borrow_mut()
+            .push(Box::new(on_press));
+    }
+
     fn style_update(&self) {
         let text_height = self.props.text_height.unwrap_or(self.theme.text_height);
 
@@ -160,12 +213,15 @@ impl Button {
     }
 }
 
-pub(crate) fn button_hooks(
+pub(crate) fn button_hooks<F>(
     button: &Arc<Bin>,
     colors: [Color; 2],
     hover_colors: [Color; 2],
     press_colors: [Color; 2],
-) {
+    mut on_press: F,
+) where
+    F: FnMut(&WindowState) + Send + 'static,
+{
     let cursor_inside = Arc::new(AtomicBool::new(false));
     let button_pressed = Arc::new(AtomicBool::new(false));
 
@@ -213,7 +269,7 @@ pub(crate) fn button_hooks(
 
     let cb_button_pressed = button_pressed.clone();
 
-    button.on_press(MouseButton::Left, move |target, _, _| {
+    button.on_press(MouseButton::Left, move |target, w_state, _| {
         cb_button_pressed.store(true, atomic::Ordering::SeqCst);
         let button = target.into_bin().unwrap();
         let mut style = button.style_copy();
@@ -224,6 +280,7 @@ pub(crate) fn button_hooks(
             .iter_mut()
             .for_each(|vert| vert.color = press_colors[1]);
         button.style_update(style).expect_valid();
+        on_press(w_state);
         Default::default()
     });
 

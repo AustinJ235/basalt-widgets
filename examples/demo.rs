@@ -2,7 +2,7 @@ use basalt::interface::{BinStyle, ChildFloatMode};
 use basalt::render::{MSAA, Renderer, RendererError};
 use basalt::window::WindowOptions;
 use basalt::{Basalt, BasaltOptions};
-use basalt_widgets::{Container, Theme};
+use basalt_widgets::{Theme, WidgetContainer};
 
 fn main() {
     Basalt::initialize(BasaltOptions::default(), move |basalt_res| {

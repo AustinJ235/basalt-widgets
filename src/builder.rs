@@ -1,3 +1,5 @@
+//! Builder types
+
 use std::sync::Arc;
 
 use basalt::interface::Bin;
@@ -10,6 +12,7 @@ pub use crate::switch_button::SwitchButtonBuilder;
 pub use crate::toggle_button::ToggleButtonBuilder;
 use crate::{Theme, WidgetParent};
 
+/// General builder for widgets.
 pub struct WidgetBuilder {
     pub(crate) parent: WidgetParent,
     pub(crate) theme: Theme,
@@ -30,27 +33,35 @@ impl WidgetBuilder {
         }
     }
 
+    /// Specifiy a theme to be used.
+    ///
+    /// **Note**: When not used the theme will be Basalt's default light theme.
     pub fn with_theme(mut self, theme: Theme) -> Self {
         self.theme = theme;
         self
     }
 
+    /// Transition into building a [`Button`](crate::Button)
     pub fn button(self) -> ButtonBuilder {
         ButtonBuilder::with_builder(self)
     }
 
+    /// Transition into building a [`SpinButton`](crate::SpinButton)
     pub fn spin_button(self) -> SpinButtonBuilder {
         SpinButtonBuilder::with_builder(self)
     }
 
+    /// Transition into building a [`ToggleButton`](crate::ToggleButton)
     pub fn toggle_button(self) -> ToggleButtonBuilder {
         ToggleButtonBuilder::with_builder(self)
     }
 
+    /// Transition into building a [`SwitchButton`](crate::SwitchButton)
     pub fn switch_button(self) -> SwitchButtonBuilder {
         SwitchButtonBuilder::with_builder(self)
     }
 
+    /// Transition into building a [`HoriScaler`](crate::HoriScaler)
     pub fn hori_scaler(self) -> HoriScalerBuilder {
         HoriScalerBuilder::with_builder(self)
     }

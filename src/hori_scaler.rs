@@ -9,22 +9,36 @@ use parking_lot::ReentrantMutex;
 use crate::builder::WidgetBuilder;
 use crate::{Theme, WidgetParent};
 
+/// Builder for [`HoriScaler`]
 pub struct HoriScalerBuilder {
     widget: WidgetBuilder,
     props: Properties,
+    on_change: Vec<Box<dyn FnMut(&Arc<HoriScaler>, f32) + Send + 'static>>,
 }
 
+/// An error than can occur from [`HoriScalerBuilder::build`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HoriScalerError {
+    /// Value provided by [`HoriScalerBuilder::max_value`] is greater than the value provided by
+    /// [`HoriScalerBuilder::min_value`].
     MaxLessThanMin,
+    /// Value provided by [`HoriScalerBuilder::set_value`] is not in range specified by
+    /// [`HoriScalerBuilder::min_value`] and [`HoriScalerBuilder::max_value`].
     SetValNotInRange,
 }
 
+/// Determines how the value of [`HoriScaler`] is rounded when it is modified.
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub enum ScalerRound {
+    /// The value is not rounded and left as is.
+    ///
+    /// **Note**: This is the default.
     #[default]
     None,
+    /// The value is rounded to increments of the small step provided by
+    /// [`HoriScalerBuilder::small_step`].
     Step,
+    /// The value is rounded to the nearest whole number.
     Int,
 }
 
@@ -56,59 +70,109 @@ impl Default for Properties {
     }
 }
 
+/// Builder for [`HoriScaler`].
 impl HoriScalerBuilder {
     pub(crate) fn with_builder(builder: WidgetBuilder) -> Self {
         Self {
             widget: builder,
             props: Default::default(),
+            on_change: Vec::new(),
         }
     }
 
+    /// Specify the minimum value.
+    ///
+    /// **Note**: When this isn't used the minimum value will be `0.0`.
     pub fn min_value(mut self, min: f32) -> Self {
         self.props.min = min;
         self
     }
 
+    /// Specify the maximum value.
+    ///
+    /// **Note**: When this isn't used the maxium value will be `0.0`.
     pub fn max_value(mut self, max: f32) -> Self {
         self.props.max = max;
         self
     }
 
+    /// Set the initial value.
+    ///
+    /// **Note**: When this isn't used the initial value will be `0.0`.
     pub fn set_value(mut self, val: f32) -> Self {
         self.props.val = val;
         self
     }
 
+    /// Set the value of a small step.
+    ///
+    /// **Notes**:
+    /// - This is when no modifier keys are used.
+    /// - When this isn't used the small step will be `1.0`.
     pub fn small_step(mut self, step: f32) -> Self {
         self.props.small_step = step;
         self
     }
 
+    /// Set the value of a medium step.
+    ///
+    /// **Notes**:
+    /// - This when either [`Qwerty::LCtrl`](basalt::input::Qwerty::LCtrl) or
+    /// [`Qwerty::RCtrl`](basalt::input::Qwerty::RCtrl) is used.
+    /// - Dragging the knob with the mouse will not be effected by this value.
+    /// - When this isn't used the medium step will be `1.0`.
     pub fn medium_step(mut self, step: f32) -> Self {
         self.props.medium_step = step;
         self
     }
 
+    /// Set the value of a large step.
+    ///
+    /// **Notes**:
+    /// - This when either [`Qwerty::LShift`](basalt::input::Qwerty::LShift) or
+    /// [`Qwerty::RShift`](basalt::input::Qwerty::RShift) is used.
+    /// - Dragging the knob with the mouse will not be effected by this value.
+    /// - When this isn't used the large step will be `1.0`.
     pub fn large_step(mut self, step: f32) -> Self {
         self.props.large_step = step;
         self
     }
 
+    /// Set how the value is rounded after being modified.
+    ///
+    /// See documentation of [`ScalerRound`] for more information.
     pub fn round(mut self, round: ScalerRound) -> Self {
         self.props.round = round;
         self
     }
 
+    /// **Temporary**
     pub fn width(mut self, width: f32) -> Self {
         self.props.width = Some(width);
         self
     }
 
+    /// **Temporary**
     pub fn height(mut self, height: f32) -> Self {
         self.props.height = Some(height);
         self
     }
 
+    /// Add a callback to be called when the [`HoriScaler`]'s value changed.
+    ///
+    /// **Note**: When changing the value within the callback, no callbacks will be called with
+    ///  the updated value.
+    ///
+    /// **Panics**: When adding a callback within the callback.
+    pub fn on_change<F>(mut self, on_change: F) -> Self
+    where
+        F: FnMut(&Arc<HoriScaler>, f32) + Send + 'static,
+    {
+        self.on_change.push(Box::new(on_change));
+        self
+    }
+
+    /// Finish building the [`HoriScaler`].
     pub fn build(self) -> Result<Arc<HoriScaler>, HoriScalerError> {
         if self.props.max < self.props.min {
             return Err(HoriScalerError::MaxLessThanMin);
@@ -127,7 +191,7 @@ impl HoriScalerBuilder {
 
         match &self.widget.parent {
             WidgetParent::Bin(parent) => parent.add_child(container.clone()),
-            _ => (),
+            _ => unimplemented!(),
         }
 
         container.add_child(track.clone());
@@ -143,9 +207,10 @@ impl HoriScalerBuilder {
             track,
             confine,
             knob,
-            state: ReentrantMutex::new(RefCell::new(State {
-                val: initial_val,
-            })),
+            state: ReentrantMutex::new(State {
+                val: RefCell::new(initial_val),
+                on_change: RefCell::new(self.on_change),
+            }),
         });
 
         let cb_hori_scaler = hori_scaler.clone();
@@ -287,6 +352,7 @@ impl HoriScalerBuilder {
     }
 }
 
+/// Horizonal scaler widget
 pub struct HoriScaler {
     theme: Theme,
     props: Properties,
@@ -294,11 +360,12 @@ pub struct HoriScaler {
     track: Arc<Bin>,
     confine: Arc<Bin>,
     knob: Arc<Bin>,
-    state: ReentrantMutex<RefCell<State>>,
+    state: ReentrantMutex<State>,
 }
 
 struct State {
-    val: f32,
+    val: RefCell<f32>,
+    on_change: RefCell<Vec<Box<dyn FnMut(&Arc<HoriScaler>, f32) + Send + 'static>>>,
 }
 
 impl HoriScaler {
@@ -312,11 +379,17 @@ impl HoriScaler {
         }
     }
 
-    fn set_pct(&self, pct: f32) {
+    fn set_pct(self: &Arc<Self>, pct: f32) {
         self.set(((self.props.max - self.props.min) * (pct / 100.0)) + self.props.min);
     }
 
-    pub fn set(&self, mut val: f32) {
+    /// Set the value to the provided valued.
+    ///
+    /// **Notes**:
+    /// - This will be effected by rounding provided by [`HoriScalerBuilder::round`].
+    /// - This value will be clamped to values provided by [`HoriScalerBuilder::min_value`]
+    /// and [`HoriScalerBuilder::max_value`].
+    pub fn set(self: &Arc<Self>, mut val: f32) {
         val = match self.props.round {
             ScalerRound::None => val,
             ScalerRound::Int => val.round(),
@@ -333,19 +406,60 @@ impl HoriScaler {
             })
             .expect_valid();
 
-        self.state.lock().borrow_mut().val = val;
+        let state = self.state.lock();
+        *state.val.borrow_mut() = val;
+
+        if let Ok(mut on_change_cbs) = state.on_change.try_borrow_mut() {
+            for on_change in on_change_cbs.iter_mut() {
+                on_change(self, val);
+            }
+        }
     }
 
-    pub fn increment(&self, amt: f32) {
+    /// Get the current value.
+    pub fn val(&self) -> f32 {
+        *self.state.lock().val.borrow()
+    }
+
+    /// Increment the value by the provided amount.
+    ///
+    /// **Notes**:
+    /// - The resulting value will be effected by rounding provided by [`HoriScalerBuilder::round`].
+    /// - The resulting value will be clamped to values provided by [`HoriScalerBuilder::min_value`]
+    /// and [`HoriScalerBuilder::max_value`].
+    pub fn increment(self: &Arc<Self>, amt: f32) {
         let state = self.state.lock();
-        let val = state.borrow().val + amt;
+        let val = *state.val.borrow() + amt;
         self.set(val);
     }
 
-    pub fn decrement(&self, amt: f32) {
+    /// Decrement the value by the provided amount.
+    ///
+    /// **Notes**:
+    /// - The resulting value will be effected by rounding provided by [`HoriScalerBuilder::round`].
+    /// - The resulting value will be clamped to values provided by [`HoriScalerBuilder::min_value`]
+    /// and [`HoriScalerBuilder::max_value`].
+    pub fn decrement(self: &Arc<Self>, amt: f32) {
         let state = self.state.lock();
-        let val = state.borrow().val - amt;
+        let val = *state.val.borrow() - amt;
         self.set(val);
+    }
+
+    /// Add a callback to be called when the [`HoriScaler`]'s value changed.
+    ///
+    /// **Note**: When changing the value within the callback, no callbacks will be called with
+    ///  the updated value.
+    ///
+    /// **Panics**: When adding a callback within the callback.
+    pub fn on_change<F>(&self, on_change: F)
+    where
+        F: FnMut(&Arc<HoriScaler>, f32) + Send + 'static,
+    {
+        self.state
+            .lock()
+            .on_change
+            .borrow_mut()
+            .push(Box::new(on_change));
     }
 
     fn style_update(self: &Arc<Self>) {
@@ -362,7 +476,7 @@ impl HoriScaler {
         let widget_height_1_2 = widget_height / 2.0;
         let widget_height_1_4 = widget_height / 4.0;
 
-        let pct = ((self.state.lock().borrow().val - self.props.min)
+        let pct = ((*self.state.lock().val.borrow() - self.props.min)
             / (self.props.max - self.props.min))
             * 100.0;
 
