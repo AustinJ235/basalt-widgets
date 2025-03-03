@@ -13,6 +13,7 @@ mod spin_button;
 mod switch_button;
 mod theme;
 mod toggle_button;
+mod vert_scaler;
 
 use std::sync::Arc;
 
@@ -26,6 +27,7 @@ pub use self::spin_button::SpinButton;
 pub use self::switch_button::SwitchButton;
 pub use self::theme::{Theme, ThemeColors};
 pub use self::toggle_button::ToggleButton;
+pub use self::vert_scaler::VertScaler;
 
 /// Trait used by containers that support containing widgets.
 pub trait WidgetContainer {

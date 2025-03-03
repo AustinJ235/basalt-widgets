@@ -10,6 +10,7 @@ pub use crate::hori_scaler::HoriScalerBuilder;
 pub use crate::spin_button::SpinButtonBuilder;
 pub use crate::switch_button::SwitchButtonBuilder;
 pub use crate::toggle_button::ToggleButtonBuilder;
+pub use crate::vert_scaler::VertScalerBuilder;
 use crate::{Theme, WidgetParent};
 
 /// General builder for widgets.
@@ -64,5 +65,10 @@ impl WidgetBuilder {
     /// Transition into building a [`HoriScaler`](crate::HoriScaler)
     pub fn hori_scaler(self) -> HoriScalerBuilder {
         HoriScalerBuilder::with_builder(self)
+    }
+
+    /// Transition into building a [`VertScaler`](crate::VertScaler)
+    pub fn vert_scaler(self) -> VertScalerBuilder {
+        VertScalerBuilder::with_builder(self)
     }
 }

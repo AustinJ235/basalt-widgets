@@ -62,6 +62,16 @@ fn main() {
             .build()
             .unwrap();
 
+        let _vert_scaler = background
+            .create_widget()
+            .vert_scaler()
+            .max_value(100.0)
+            .small_step(1.0)
+            .medium_step(5.0)
+            .large_step(10.0)
+            .build()
+            .unwrap();
+
         let mut renderer = Renderer::new(window).unwrap();
 
         renderer.interface_only().msaa(MSAA::X8);
