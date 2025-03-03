@@ -1,4 +1,8 @@
+use std::sync::Arc;
+use std::time::Duration;
+
 use basalt::interface::{BinStyle, ChildFloatMode};
+use basalt::interval::IntvlHookCtrl;
 use basalt::render::{MSAA, Renderer, RendererError};
 use basalt::window::WindowOptions;
 use basalt::{Basalt, BasaltOptions};
@@ -72,8 +76,44 @@ fn main() {
             .build()
             .unwrap();
 
-        let mut renderer = Renderer::new(window).unwrap();
+        let progress_bar = background
+            .create_widget()
+            .progress_bar()
+            .set_pct(100.0)
+            .build();
 
+        progress_bar.on_press(|progress_bar, pct| {
+            progress_bar.set_pct(pct);
+        });
+
+        let wk_progress_bar = Arc::downgrade(&progress_bar);
+        let mut progress = 0.0;
+
+        let hook_id =
+            basalt
+                .interval_ref()
+                .do_every(Duration::from_millis(10), None, move |elapsed_op| {
+                    if let Some(elapsed) = elapsed_op {
+                        progress += elapsed.as_millis() as f32 / 20.0;
+
+                        if progress > 100.0 {
+                            progress = 0.0;
+                        }
+
+                        match wk_progress_bar.upgrade() {
+                            Some(progress_bar) => {
+                                progress_bar.set_pct(progress);
+                                IntvlHookCtrl::Continue
+                            },
+                            None => IntvlHookCtrl::Remove,
+                        }
+                    } else {
+                        IntvlHookCtrl::Continue
+                    }
+                });
+
+        basalt.interval_ref().start(hook_id);
+        let mut renderer = Renderer::new(window).unwrap();
         renderer.interface_only().msaa(MSAA::X8);
 
         match renderer.run() {

@@ -7,6 +7,7 @@ use basalt::window::Window;
 
 pub use crate::button::ButtonBuilder;
 pub use crate::hori_scaler::HoriScalerBuilder;
+pub use crate::progress_bar::ProgressBarBuilder;
 pub use crate::spin_button::SpinButtonBuilder;
 pub use crate::switch_button::SwitchButtonBuilder;
 pub use crate::toggle_button::ToggleButtonBuilder;
@@ -70,5 +71,10 @@ impl WidgetBuilder {
     /// Transition into building a [`VertScaler`](crate::VertScaler)
     pub fn vert_scaler(self) -> VertScalerBuilder {
         VertScalerBuilder::with_builder(self)
+    }
+
+    /// Transition into building a [`ProgressBar`](crate::ProgressBar)
+    pub fn progress_bar(self) -> ProgressBarBuilder {
+        ProgressBarBuilder::with_builder(self)
     }
 }

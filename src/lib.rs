@@ -9,6 +9,7 @@ pub mod error;
 
 mod button;
 mod hori_scaler;
+mod progress_bar;
 mod spin_button;
 mod switch_button;
 mod theme;
@@ -23,6 +24,7 @@ use basalt::window::Window;
 use self::builder::WidgetBuilder;
 pub use self::button::Button;
 pub use self::hori_scaler::{HoriScaler, ScalerRound};
+pub use self::progress_bar::ProgressBar;
 pub use self::spin_button::SpinButton;
 pub use self::switch_button::SwitchButton;
 pub use self::theme::{Theme, ThemeColors};
