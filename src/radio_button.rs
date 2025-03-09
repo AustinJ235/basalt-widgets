@@ -183,6 +183,11 @@ impl<T> RadioButton<T> {
         &self.props.value
     }
 
+    /// Obtain a copy of the [`RadioButtonGroup`] if present.
+    pub fn group(&self) -> Option<Arc<RadioButtonGroup<T>>> {
+        self.state.lock().group.borrow().as_ref().cloned()
+    }
+
     /// Add a callback to be called when the [`RadioButton`]'s selection changed.
     ///
     /// **Note**: When changing the state within the callback, no callbacks add to this
@@ -311,60 +316,9 @@ impl<T> RadioButtonGroup<T> {
         })
     }
 
-    /// Clear any existing selection of [`RadioButton`].
-    pub fn clear_selection(&self) {
-        let state = self.state.lock();
-
-        if let Some(button_id) = state.selection.borrow_mut().take() {
-            match state.buttons.borrow().get(&button_id) {
-                Some(button) => {
-                    button.set_selected(false);
-                },
-                None => unreachable!(),
-            }
-
-            state.call_on_change(None);
-        }
-    }
-
-    /// Select a specific [`RadioButton`].
-    pub fn select(&self, radio_button: &Arc<RadioButton<T>>) -> Result<(), RadioButtonError> {
-        let state = self.state.lock();
-        let b_state = radio_button.state.lock();
-
-        if b_state.group.borrow().is_none()
-            || b_state.group.borrow().as_ref().unwrap().id != self.id
-        {
-            return Err(RadioButtonError::NotInGroup);
-        }
-
-        if let Some(old_button_id) = state.selection.borrow_mut().take() {
-            let old_button = state.buttons.borrow().get(&old_button_id).cloned().unwrap();
-            old_button.set_selected(false);
-        }
-
-        *state.selection.borrow_mut() = Some(b_state.id.borrow().unwrap());
-        radio_button.set_selected(true);
-        state.call_on_change(Some(radio_button));
-        Ok(())
-    }
-
-    /// Add a callback to be called when a [`RadioButton`] is selected.
-    ///
-    /// **Note**: When changing the state within the callback, no callbacks add to this
-    /// [`RadioButtonGroup`] will be called with the updated state. Callbacks added specify to
-    /// [`RadioButton`] will still be called.
-    ///
-    /// **Panics**: When adding a callback within the callback to this [`RadioButtonGroup`].
-    pub fn on_change<F>(&self, on_change: F)
-    where
-        F: FnMut(Option<&Arc<RadioButton<T>>>) + Send + 'static,
-    {
-        self.state
-            .lock()
-            .on_change
-            .borrow_mut()
-            .push(Box::new(on_change));
+    /// Obtain a list of [`RadioButton`]'s in this group.
+    pub fn buttons(&self) -> Vec<Arc<RadioButton<T>>> {
+        self.state.lock().buttons.borrow().values().map(|b| b.clone()).collect()
     }
 
     /// Add a [`RadioButton`] to this [`RadioButtonGroup`].
@@ -441,6 +395,68 @@ impl<T> RadioButtonGroup<T> {
         }
 
         Ok(())
+    }
+
+    /// Clear any existing selection of [`RadioButton`].
+    pub fn clear_selection(&self) {
+        let state = self.state.lock();
+
+        if let Some(button_id) = state.selection.borrow_mut().take() {
+            match state.buttons.borrow().get(&button_id) {
+                Some(button) => {
+                    button.set_selected(false);
+                },
+                None => unreachable!(),
+            }
+
+            state.call_on_change(None);
+        }
+    }
+
+    /// Select a specific [`RadioButton`].
+    pub fn select(&self, radio_button: &Arc<RadioButton<T>>) -> Result<(), RadioButtonError> {
+        let state = self.state.lock();
+        let b_state = radio_button.state.lock();
+
+        if b_state.group.borrow().is_none()
+            || b_state.group.borrow().as_ref().unwrap().id != self.id
+        {
+            return Err(RadioButtonError::NotInGroup);
+        }
+
+        if state.selection.borrow().is_some()
+            && b_state.id.borrow().unwrap() == state.selection.borrow().unwrap()
+        {
+            return Ok(());
+        }
+
+        if let Some(old_button_id) = state.selection.borrow_mut().take() {
+            let old_button = state.buttons.borrow().get(&old_button_id).cloned().unwrap();
+            old_button.set_selected(false);
+        }
+
+        *state.selection.borrow_mut() = Some(b_state.id.borrow().unwrap());
+        radio_button.set_selected(true);
+        state.call_on_change(Some(radio_button));
+        Ok(())
+    }
+
+    /// Add a callback to be called when a [`RadioButton`] is selected.
+    ///
+    /// **Note**: When changing the state within the callback, no callbacks add to this
+    /// [`RadioButtonGroup`] will be called with the updated state. Callbacks added specify to
+    /// [`RadioButton`] will still be called.
+    ///
+    /// **Panics**: When adding a callback within the callback to this [`RadioButtonGroup`].
+    pub fn on_change<F>(&self, on_change: F)
+    where
+        F: FnMut(Option<&Arc<RadioButton<T>>>) + Send + 'static,
+    {
+        self.state
+            .lock()
+            .on_change
+            .borrow_mut()
+            .push(Box::new(on_change));
     }
 }
 
