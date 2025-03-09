@@ -84,17 +84,22 @@ where
     /// Finish building the [`RadioButton`].
     pub fn build(self) -> Arc<RadioButton<T>> {
         let window = self.widget.parent.window();
-        let container = window.new_bin();
+        let mut bins = window.new_bins(2).into_iter();
+        let container = bins.next().unwrap();
+        let fill = bins.next().unwrap();
 
         match &self.widget.parent {
             WidgetParent::Bin(parent) => parent.add_child(container.clone()),
             _ => unimplemented!(),
         }
 
+        container.add_child(fill.clone());
+
         let radio_button = Arc::new(RadioButton {
             theme: self.widget.theme,
             props: self.props,
             container,
+            fill,
             state: ReentrantMutex::new(State {
                 id: RefCell::new(None),
                 group: RefCell::new(None),
@@ -137,6 +142,7 @@ pub struct RadioButton<T> {
     theme: Theme,
     props: Properties<T>,
     container: Arc<Bin>,
+    fill: Arc<Bin>,
     state: ReentrantMutex<State<T>>,
 }
 
@@ -178,6 +184,11 @@ impl<T> RadioButton<T> {
         }
     }
 
+    /// Check if the [`RadioButton`] is selected.
+    pub fn is_selected(&self) -> bool {
+        *self.state.lock().selected.borrow()
+    }
+
     /// Obtain a reference the value.
     pub fn value_ref(&self) -> &T {
         &self.props.value
@@ -213,17 +224,15 @@ impl<T> RadioButton<T> {
         }
 
         *state.selected.borrow_mut() = selected;
-        let mut container_style = self.container.style_copy();
-
-        // TODO: Better Display
+        let mut fill_style = self.fill.style_copy();
 
         if selected {
-            container_style.back_color = Some(self.theme.colors.accent1);
+            fill_style.hidden = None;
         } else {
-            container_style.back_color = Some(self.theme.colors.back2);
+            fill_style.hidden = Some(true);
         }
 
-        self.container.style_update(container_style).expect_valid();
+        self.fill.style_update(fill_style).expect_valid();
 
         if let Ok(mut on_change_cbs) = state.on_change.try_borrow_mut() {
             for on_change in on_change_cbs.iter_mut() {
@@ -235,6 +244,7 @@ impl<T> RadioButton<T> {
     fn style_update(&self) {
         let width = self.theme.spacing; // TODO: Configurable
         let width_1_2 = width / 2.0;
+        let fill_gap = (width / 8.0).round();
 
         let mut container_style = BinStyle {
             position: Some(BinPosition::Floating),
@@ -242,13 +252,28 @@ impl<T> RadioButton<T> {
             margin_b: Some(self.theme.spacing),
             margin_l: Some(self.theme.spacing),
             margin_r: Some(self.theme.spacing),
-            back_color: Some(self.theme.colors.back2),
             width: Some(width),
             height: Some(width),
+            back_color: Some(self.theme.colors.back2),
             border_radius_tl: Some(width_1_2),
             border_radius_tr: Some(width_1_2),
             border_radius_bl: Some(width_1_2),
             border_radius_br: Some(width_1_2),
+            ..Default::default()
+        };
+
+        let mut fill_style = BinStyle {
+            hidden: Some(true),
+            position: Some(BinPosition::Parent),
+            pos_from_t: Some(fill_gap),
+            pos_from_b: Some(fill_gap),
+            pos_from_l: Some(fill_gap),
+            pos_from_r: Some(fill_gap),
+            back_color: Some(self.theme.colors.accent1),
+            border_radius_tl: Some(width_1_2 - fill_gap),
+            border_radius_tr: Some(width_1_2 - fill_gap),
+            border_radius_bl: Some(width_1_2 - fill_gap),
+            border_radius_br: Some(width_1_2 - fill_gap),
             ..Default::default()
         };
 
@@ -263,7 +288,12 @@ impl<T> RadioButton<T> {
             container_style.border_color_r = Some(self.theme.colors.border1);
         }
 
+        if self.is_selected() {
+            fill_style.hidden = None;
+        }
+
         self.container.style_update(container_style).expect_valid();
+        self.fill.style_update(fill_style).expect_valid();
     }
 }
 
@@ -318,7 +348,13 @@ impl<T> RadioButtonGroup<T> {
 
     /// Obtain a list of [`RadioButton`]'s in this group.
     pub fn buttons(&self) -> Vec<Arc<RadioButton<T>>> {
-        self.state.lock().buttons.borrow().values().map(|b| b.clone()).collect()
+        self.state
+            .lock()
+            .buttons
+            .borrow()
+            .values()
+            .cloned()
+            .collect()
     }
 
     /// Add a [`RadioButton`] to this [`RadioButtonGroup`].
