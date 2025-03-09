@@ -229,8 +229,9 @@ impl ProgressBar {
             container_style.border_radius_tr = Some(radius);
             container_style.border_radius_bl = Some(radius);
             container_style.border_radius_br = Some(radius);
-
+            fill_style.border_radius_tl = Some(radius);
             fill_style.border_radius_tr = Some(radius);
+            fill_style.border_radius_bl = Some(radius);
             fill_style.border_radius_br = Some(radius);
         }
 
