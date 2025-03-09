@@ -8,6 +8,7 @@ use basalt::window::Window;
 pub use crate::button::ButtonBuilder;
 pub use crate::hori_scaler::HoriScalerBuilder;
 pub use crate::progress_bar::ProgressBarBuilder;
+pub use crate::radio_button::RadioButtonBuilder;
 pub use crate::spin_button::SpinButtonBuilder;
 pub use crate::switch_button::SwitchButtonBuilder;
 pub use crate::toggle_button::ToggleButtonBuilder;
@@ -76,5 +77,13 @@ impl WidgetBuilder {
     /// Transition into building a [`ProgressBar`](crate::ProgressBar)
     pub fn progress_bar(self) -> ProgressBarBuilder {
         ProgressBarBuilder::with_builder(self)
+    }
+
+    /// Transition into building a [`RadioButton`](crate::RadioButton)
+    pub fn radio_button<T>(self, value: T) -> RadioButtonBuilder<T>
+    where
+        T: Send + Sync + 'static,
+    {
+        RadioButtonBuilder::with_builder(self, value)
     }
 }

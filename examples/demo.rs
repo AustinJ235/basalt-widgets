@@ -6,7 +6,7 @@ use basalt::interval::IntvlHookCtrl;
 use basalt::render::{MSAA, Renderer, RendererError};
 use basalt::window::WindowOptions;
 use basalt::{Basalt, BasaltOptions};
-use basalt_widgets::{Theme, WidgetContainer};
+use basalt_widgets::{RadioButtonGroup, Theme, WidgetContainer};
 
 fn main() {
     Basalt::initialize(BasaltOptions::default(), move |basalt_res| {
@@ -76,6 +76,8 @@ fn main() {
             .build()
             .unwrap();
 
+        // Progress Bar
+
         let progress_bar = background
             .create_widget()
             .progress_bar()
@@ -113,6 +115,40 @@ fn main() {
                 });
 
         basalt.interval_ref().start(hook_id);
+
+        // Radio Buttons
+
+        #[derive(PartialEq, Debug)]
+        enum RadioValue {
+            A,
+            B,
+            C,
+        }
+
+        let radio_group = RadioButtonGroup::new();
+
+        let _radio_a = background
+            .create_widget()
+            .radio_button(RadioValue::A)
+            .group(&radio_group)
+            .build();
+
+        let _radio_b = background
+            .create_widget()
+            .radio_button(RadioValue::B)
+            .group(&radio_group)
+            .build();
+
+        let _radio_c = background
+            .create_widget()
+            .radio_button(RadioValue::C)
+            .group(&radio_group)
+            .build();
+
+        radio_group.on_change(move |radio_op| {
+            println!("radio value: {:?}", radio_op.map(|radio| radio.value_ref()));
+        });
+
         let mut renderer = Renderer::new(window).unwrap();
         renderer.interface_only().msaa(MSAA::X8);
 

@@ -10,6 +10,7 @@ pub mod error;
 mod button;
 mod hori_scaler;
 mod progress_bar;
+mod radio_button;
 mod spin_button;
 mod switch_button;
 mod theme;
@@ -25,6 +26,7 @@ use self::builder::WidgetBuilder;
 pub use self::button::Button;
 pub use self::hori_scaler::{HoriScaler, ScalerRound};
 pub use self::progress_bar::ProgressBar;
+pub use self::radio_button::{RadioButton, RadioButtonGroup};
 pub use self::spin_button::SpinButton;
 pub use self::switch_button::SwitchButton;
 pub use self::theme::{Theme, ThemeColors};
@@ -34,6 +36,8 @@ pub use self::vert_scaler::VertScaler;
 /// Trait used by containers that support containing widgets.
 pub trait WidgetContainer {
     fn create_widget(&self) -> WidgetBuilder;
+    // fn container_bin(&self) -> &Arc<Bin>;
+    // fn default_theme(&self) -> Option<Theme>;
 }
 
 impl WidgetContainer for Arc<Window> {

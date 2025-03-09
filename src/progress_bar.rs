@@ -8,6 +8,7 @@ use parking_lot::ReentrantMutex;
 use crate::builder::WidgetBuilder;
 use crate::{Theme, WidgetParent};
 
+/// Builder for [`ProgressBar`].
 pub struct ProgressBarBuilder {
     widget: WidgetBuilder,
     props: Properties,
@@ -21,7 +22,6 @@ struct Properties {
     height: Option<f32>,
 }
 
-/// Builder for [`ProgressBar`].
 impl ProgressBarBuilder {
     pub(crate) fn with_builder(builder: WidgetBuilder) -> Self {
         Self {
@@ -113,6 +113,7 @@ impl ProgressBarBuilder {
     }
 }
 
+/// Progress bar widget
 pub struct ProgressBar {
     theme: Theme,
     props: Properties,
