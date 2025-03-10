@@ -149,8 +149,16 @@ fn main() {
             println!("radio value: {:?}", radio_op.map(|radio| radio.value_ref()));
         });
 
+        // Check Boxes
+
+        let _check_a = background.create_widget().check_box(()).build();
+
+        let _check_b = background.create_widget().check_box(()).build();
+
+        let _check_c = background.create_widget().check_box(()).build();
+
         let mut renderer = Renderer::new(window).unwrap();
-        renderer.interface_only().msaa(MSAA::X8);
+        renderer.interface_only().msaa(MSAA::X4);
 
         match renderer.run() {
             Ok(_) | Err(RendererError::Closed) => (),

@@ -6,6 +6,7 @@ use basalt::interface::Bin;
 use basalt::window::Window;
 
 pub use crate::button::ButtonBuilder;
+pub use crate::check_box::CheckBoxBuilder;
 pub use crate::hori_scaler::HoriScalerBuilder;
 pub use crate::progress_bar::ProgressBarBuilder;
 pub use crate::radio_button::RadioButtonBuilder;
@@ -85,5 +86,13 @@ impl WidgetBuilder {
         T: Send + Sync + 'static,
     {
         RadioButtonBuilder::with_builder(self, value)
+    }
+
+    /// Transition into building a [`CheckBox`](crate::CheckBox)
+    pub fn check_box<T>(self, value: T) -> CheckBoxBuilder<T>
+    where
+        T: Send + Sync + 'static,
+    {
+        CheckBoxBuilder::with_builder(self, value)
     }
 }

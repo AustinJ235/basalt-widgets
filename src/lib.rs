@@ -8,6 +8,7 @@ pub mod builder;
 pub mod error;
 
 mod button;
+mod check_box;
 mod hori_scaler;
 mod progress_bar;
 mod radio_button;
@@ -24,6 +25,7 @@ use basalt::window::Window;
 
 use self::builder::WidgetBuilder;
 pub use self::button::Button;
+pub use self::check_box::CheckBox;
 pub use self::hori_scaler::{HoriScaler, ScalerRound};
 pub use self::progress_bar::ProgressBar;
 pub use self::radio_button::{RadioButton, RadioButtonGroup};
