@@ -6,6 +6,7 @@ use basalt::interface::{Color, FontWeight};
 pub struct Theme {
     pub spacing: f32,
     pub text_height: f32,
+    pub base_size: f32,
     pub font_family: String,
     pub font_weight: FontWeight,
     pub border: Option<f32>,
@@ -19,6 +20,7 @@ impl Theme {
         Self {
             spacing: 12.0,
             text_height: 14.0,
+            base_size: 20.0,
             font_family: String::from("Sans Serif"),
             font_weight: FontWeight::Normal,
             border: Some(1.0),

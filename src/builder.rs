@@ -7,13 +7,12 @@ use basalt::window::Window;
 
 pub use crate::button::ButtonBuilder;
 pub use crate::check_box::CheckBoxBuilder;
-pub use crate::hori_scaler::HoriScalerBuilder;
 pub use crate::progress_bar::ProgressBarBuilder;
 pub use crate::radio_button::RadioButtonBuilder;
+pub use crate::scaler::ScalerBuilder;
 pub use crate::spin_button::SpinButtonBuilder;
 pub use crate::switch_button::SwitchButtonBuilder;
 pub use crate::toggle_button::ToggleButtonBuilder;
-pub use crate::vert_scaler::VertScalerBuilder;
 use crate::{Theme, WidgetParent};
 
 /// General builder for widgets.
@@ -65,14 +64,9 @@ impl WidgetBuilder {
         SwitchButtonBuilder::with_builder(self)
     }
 
-    /// Transition into building a [`HoriScaler`](crate::HoriScaler)
-    pub fn hori_scaler(self) -> HoriScalerBuilder {
-        HoriScalerBuilder::with_builder(self)
-    }
-
-    /// Transition into building a [`VertScaler`](crate::VertScaler)
-    pub fn vert_scaler(self) -> VertScalerBuilder {
-        VertScalerBuilder::with_builder(self)
+    /// Transition into building a [`Scaler`](crate::Scaler)
+    pub fn scaler(self) -> ScalerBuilder {
+        ScalerBuilder::with_builder(self)
     }
 
     /// Transition into building a [`ProgressBar`](crate::ProgressBar)

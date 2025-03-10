@@ -191,7 +191,7 @@ impl<T> CheckBox<T> {
     }
 
     fn style_update(&self) {
-        let width = self.theme.spacing; // TODO: Configurable
+        let width = self.theme.base_size; // TODO: Configurable
         let width_1_2 = width / 2.0;
         let check_space = (width_1_2 / 12.0).round().max(1.0);
 
@@ -218,7 +218,7 @@ impl<T> CheckBox<T> {
             pos_from_b: Some(0.0),
             pos_from_l: Some(0.0),
             pos_from_r: Some(0.0),
-            custom_verts: check_symbol_verts(width, check_space, self.theme.colors.border1),
+            custom_verts: check_symbol_verts(width, check_space, self.theme.colors.accent1),
             ..Default::default()
         };
 

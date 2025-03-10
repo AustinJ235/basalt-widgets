@@ -242,7 +242,7 @@ impl<T> RadioButton<T> {
     }
 
     fn style_update(&self) {
-        let width = self.theme.spacing; // TODO: Configurable
+        let width = self.theme.base_size; // TODO: Configurable
         let width_1_2 = width / 2.0;
         let fill_gap = (width / 8.0).round();
 

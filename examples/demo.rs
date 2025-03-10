@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use basalt::interface::{BinStyle, ChildFloatMode};
+use basalt::interface::BinStyle;
 use basalt::interval::IntvlHookCtrl;
 use basalt::render::{MSAA, Renderer, RendererError};
 use basalt::window::WindowOptions;
@@ -31,7 +31,6 @@ fn main() {
                 pos_from_l: Some(0.0),
                 pos_from_r: Some(0.0),
                 back_color: Some(theme.colors.back1),
-                child_float_mode: Some(ChildFloatMode::Column),
                 ..BinStyle::default()
             })
             .expect_valid();
@@ -56,19 +55,9 @@ fn main() {
 
         let _switch_button = background.create_widget().switch_button().build();
 
-        let _hori_scaler = background
+        let _scaler = background
             .create_widget()
-            .hori_scaler()
-            .max_value(100.0)
-            .small_step(1.0)
-            .medium_step(5.0)
-            .large_step(10.0)
-            .build()
-            .unwrap();
-
-        let _vert_scaler = background
-            .create_widget()
-            .vert_scaler()
+            .scaler()
             .max_value(100.0)
             .small_step(1.0)
             .medium_step(5.0)
@@ -152,9 +141,7 @@ fn main() {
         // Check Boxes
 
         let _check_a = background.create_widget().check_box(()).build();
-
         let _check_b = background.create_widget().check_box(()).build();
-
         let _check_c = background.create_widget().check_box(()).build();
 
         let mut renderer = Renderer::new(window).unwrap();

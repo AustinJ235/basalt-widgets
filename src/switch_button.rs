@@ -136,7 +136,7 @@ impl SwitchButton {
 
         let widget_height = match self.props.height {
             Some(height) => height,
-            None => self.theme.spacing * 2.0,
+            None => self.theme.base_size,
         };
 
         if enabled {
@@ -211,7 +211,7 @@ impl SwitchButton {
     fn style_update(&self) {
         let widget_height = match self.props.height {
             Some(height) => height,
-            None => self.theme.spacing * 2.0,
+            None => self.theme.base_size,
         };
 
         let widget_width = match self.props.width {

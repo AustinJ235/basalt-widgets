@@ -179,12 +179,12 @@ impl ProgressBar {
     fn style_update(self: &Arc<Self>) {
         let widget_height = match self.props.height {
             Some(height) => height,
-            None => self.theme.spacing * 2.0,
+            None => self.theme.base_size,
         };
 
         let widget_width = match self.props.width {
             Some(width) => width,
-            None => self.theme.spacing * 8.0,
+            None => widget_height * 4.0,
         };
 
         let widget_height_1_2 = widget_height / 2.0;

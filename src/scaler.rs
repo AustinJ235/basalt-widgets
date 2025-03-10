@@ -9,27 +9,26 @@ use parking_lot::ReentrantMutex;
 use crate::builder::WidgetBuilder;
 use crate::{Theme, WidgetParent};
 
-/// Builder for [`HoriScaler`]
-pub struct HoriScalerBuilder {
+/// Builder for [`Scaler`]
+pub struct ScalerBuilder {
     widget: WidgetBuilder,
     props: Properties,
-    on_change: Vec<Box<dyn FnMut(&Arc<HoriScaler>, f32) + Send + 'static>>,
+    on_change: Vec<Box<dyn FnMut(&Arc<Scaler>, f32) + Send + 'static>>,
 }
 
-/// An error than can occur from [`HoriScalerBuilder::build`]/[`VertScalerBuilder::build`](crate::builder::VertScalerBuilder::build).
+/// An error than can occur from [`ScalerBuilder::build`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScalerError {
-    /// Value provided by [`HoriScalerBuilder::max_value`]/[`VertScalerBuilder::max_value`](crate::builder::VertScalerBuilder::max_value)
-    /// is greater than the value provided by [`HoriScalerBuilder::min_value`]/[`VertScalerBuilder::min_value`](crate::builder::VertScalerBuilder::min_value)
+    /// Value provided by [`ScalerBuilder::max_value`] is greater than the value provided by
+    /// [`ScalerBuilder::min_value`].
     MaxLessThanMin,
-    /// Value provided by [`HoriScalerBuilder::set_value`]/[`VertScalerBuilder::set_value`](crate::builder::VertScalerBuilder::set_value)
-    /// is not in range specified by [`HoriScalerBuilder::min_value`]/[`VertScalerBuilder::min_value`](crate::builder::VertScalerBuilder::min_value)
-    /// and [`HoriScalerBuilder::max_value`]/[`VertScalerBuilder::max_value`](crate::builder::VertScalerBuilder::max_value).
+    /// Value provided by [`ScalerBuilder::set_value`] is not in range specified by
+    /// [`ScalerBuilder::min_value`] and [`ScalerBuilder::max_value`].
     SetValNotInRange,
 }
 
-/// Determines how the value of [`HoriScaler`] is rounded when it is modified.
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+/// Determines how the value of [`Scaler`] is rounded when it is modified.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScalerRound {
     /// The value is not rounded and left as is.
     ///
@@ -37,10 +36,22 @@ pub enum ScalerRound {
     #[default]
     None,
     /// The value is rounded to increments of the small step provided by
-    /// [`HoriScalerBuilder::small_step`].
+    /// [`ScalerBuilder::small_step`].
     Step,
     /// The value is rounded to the nearest whole number.
     Int,
+}
+
+/// The orientation of the [`Scaler`].
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScalerOrientation {
+    /// Display the [`Scaler`] horizonatally.
+    ///
+    /// This is the the default.
+    #[default]
+    Horizontal,
+    /// Display the [`Scaler`] vertically.
+    Vertical,
 }
 
 struct Properties {
@@ -51,6 +62,7 @@ struct Properties {
     medium_step: f32,
     large_step: f32,
     round: ScalerRound,
+    orientation: ScalerOrientation,
     width: Option<f32>,
     height: Option<f32>,
 }
@@ -65,14 +77,15 @@ impl Default for Properties {
             medium_step: 1.0,
             large_step: 1.0,
             round: Default::default(),
+            orientation: Default::default(),
             width: None,
             height: None,
         }
     }
 }
 
-/// Builder for [`HoriScaler`].
-impl HoriScalerBuilder {
+/// Builder for [`Scaler`].
+impl ScalerBuilder {
     pub(crate) fn with_builder(builder: WidgetBuilder) -> Self {
         Self {
             widget: builder,
@@ -147,6 +160,15 @@ impl HoriScalerBuilder {
         self
     }
 
+    /// Set the orientation of the [`Scaler`].
+    ///
+    /// **Note**: When this isn't used the [`ScalerOrientation`] will be
+    /// [`Horizontal`](ScalerOrientation::Horizontal).
+    pub fn orientation(mut self, orientation: ScalerOrientation) -> Self {
+        self.props.orientation = orientation;
+        self
+    }
+
     /// **Temporary**
     pub fn width(mut self, width: f32) -> Self {
         self.props.width = Some(width);
@@ -159,7 +181,7 @@ impl HoriScalerBuilder {
         self
     }
 
-    /// Add a callback to be called when the [`HoriScaler`]'s value changed.
+    /// Add a callback to be called when the [`Scaler`]'s value changed.
     ///
     /// **Note**: When changing the value within the callback, no callbacks will be called with
     ///  the updated value.
@@ -167,14 +189,14 @@ impl HoriScalerBuilder {
     /// **Panics**: When adding a callback within the callback.
     pub fn on_change<F>(mut self, on_change: F) -> Self
     where
-        F: FnMut(&Arc<HoriScaler>, f32) + Send + 'static,
+        F: FnMut(&Arc<Scaler>, f32) + Send + 'static,
     {
         self.on_change.push(Box::new(on_change));
         self
     }
 
-    /// Finish building the [`HoriScaler`].
-    pub fn build(self) -> Result<Arc<HoriScaler>, ScalerError> {
+    /// Finish building the [`Scaler`].
+    pub fn build(self) -> Result<Arc<Scaler>, ScalerError> {
         if self.props.max < self.props.min {
             return Err(ScalerError::MaxLessThanMin);
         }
@@ -201,7 +223,7 @@ impl HoriScalerBuilder {
 
         let initial_val = self.props.val;
 
-        let hori_scaler = Arc::new(HoriScaler {
+        let scaler = Arc::new(Scaler {
             theme: self.widget.theme,
             props: self.props,
             container,
@@ -214,11 +236,11 @@ impl HoriScalerBuilder {
             }),
         });
 
-        let cb_hori_scaler = hori_scaler.clone();
+        let cb_scaler = scaler.clone();
 
-        hori_scaler.container.on_scroll(move |_, w_state, amt, _| {
-            let step = cb_hori_scaler.step_size(w_state) * -amt;
-            cb_hori_scaler.increment(step);
+        scaler.container.on_scroll(move |_, w_state, amt, _| {
+            let step = cb_scaler.step_size(w_state) * -amt;
+            cb_scaler.increment(step);
             Default::default()
         });
 
@@ -227,35 +249,45 @@ impl HoriScalerBuilder {
 
         let cb_knob_held = knob_held.clone();
 
-        hori_scaler
-            .knob
-            .on_press(MouseButton::Left, move |_, _, _| {
-                cb_knob_held.store(true, atomic::Ordering::SeqCst);
-                Default::default()
-            });
+        scaler.knob.on_press(MouseButton::Left, move |_, _, _| {
+            cb_knob_held.store(true, atomic::Ordering::SeqCst);
+            Default::default()
+        });
 
         let cb_knob_held = knob_held.clone();
 
-        hori_scaler
-            .knob
-            .on_release(MouseButton::Left, move |_, _, _| {
-                cb_knob_held.store(false, atomic::Ordering::SeqCst);
-                Default::default()
-            });
+        scaler.knob.on_release(MouseButton::Left, move |_, _, _| {
+            cb_knob_held.store(false, atomic::Ordering::SeqCst);
+            Default::default()
+        });
 
-        let cb_hori_scaler = hori_scaler.clone();
+        let cb_scaler = scaler.clone();
         let cb_knob_held = knob_held.clone();
 
         window_hook_ids.push(window.on_cursor(move |_, w_state, _| {
             if cb_knob_held.load(atomic::Ordering::SeqCst) {
-                let [cursor_x, _] = w_state.cursor_pos();
-                let track_bpu = cb_hori_scaler.track.post_update();
-                let knob_bpu = cb_hori_scaler.knob.post_update();
-                let knob_width_1_2 = (knob_bpu.tri[0] - knob_bpu.tli[0]) / 2.0;
-                let cursor_x_min = track_bpu.tli[0] + knob_width_1_2;
-                let cursor_x_max = track_bpu.tri[0] - knob_width_1_2;
-                let pct = ((cursor_x - cursor_x_min) / (cursor_x_max - cursor_x_min)) * 100.0;
-                cb_hori_scaler.set_pct(pct.clamp(0.0, 100.0));
+                let [cursor_x, cursor_y] = w_state.cursor_pos();
+                let track_bpu = cb_scaler.track.post_update();
+                let knob_bpu = cb_scaler.knob.post_update();
+
+                match cb_scaler.props.orientation {
+                    ScalerOrientation::Horizontal => {
+                        let knob_width_1_2 = (knob_bpu.tri[0] - knob_bpu.tli[0]) / 2.0;
+                        let cursor_x_min = track_bpu.tli[0] + knob_width_1_2;
+                        let cursor_x_max = track_bpu.tri[0] - knob_width_1_2;
+                        let pct =
+                            ((cursor_x - cursor_x_min) / (cursor_x_max - cursor_x_min)) * 100.0;
+                        cb_scaler.set_pct(pct.clamp(0.0, 100.0));
+                    },
+                    ScalerOrientation::Vertical => {
+                        let knob_height_1_2 = (knob_bpu.bli[0] - knob_bpu.tli[0]) / 2.0;
+                        let cursor_y_min = track_bpu.tli[1] + knob_height_1_2;
+                        let cursor_y_max = track_bpu.bli[1] - knob_height_1_2;
+                        let pct = 100.0
+                            - (((cursor_y - cursor_y_min) / (cursor_y_max - cursor_y_min)) * 100.0);
+                        cb_scaler.set_pct(pct.clamp(0.0, 100.0));
+                    },
+                }
             }
 
             Default::default()
@@ -264,17 +296,17 @@ impl HoriScalerBuilder {
         let focused = Arc::new(AtomicBool::new(false));
 
         let widget_bin_ids = [
-            hori_scaler.container.id(),
-            hori_scaler.track.id(),
-            hori_scaler.confine.id(),
-            hori_scaler.knob.id(),
+            scaler.container.id(),
+            scaler.track.id(),
+            scaler.confine.id(),
+            scaler.knob.id(),
         ];
 
         for bin in [
-            &hori_scaler.container,
-            &hori_scaler.track,
-            &hori_scaler.confine,
-            &hori_scaler.knob,
+            &scaler.container,
+            &scaler.track,
+            &scaler.confine,
+            &scaler.knob,
         ] {
             let cb_focused = focused.clone();
 
@@ -296,65 +328,65 @@ impl HoriScalerBuilder {
             });
         }
 
-        let cb_hori_scaler = hori_scaler.clone();
+        let cb_scaler = scaler.clone();
         let cb_focused = focused.clone();
 
         window_hook_ids.push(window.on_press(Qwerty::ArrowUp, move |_, w_state, _| {
             if cb_focused.load(atomic::Ordering::SeqCst) {
-                let step = cb_hori_scaler.step_size(w_state);
-                cb_hori_scaler.increment(step);
+                let step = cb_scaler.step_size(w_state);
+                cb_scaler.increment(step);
             }
 
             Default::default()
         }));
 
-        let cb_hori_scaler = hori_scaler.clone();
+        let cb_scaler = scaler.clone();
         let cb_focused = focused.clone();
 
         window_hook_ids.push(window.on_press(Qwerty::ArrowRight, move |_, w_state, _| {
             if cb_focused.load(atomic::Ordering::SeqCst) {
-                let step = cb_hori_scaler.step_size(w_state);
-                cb_hori_scaler.increment(step);
+                let step = cb_scaler.step_size(w_state);
+                cb_scaler.increment(step);
             }
 
             Default::default()
         }));
 
-        let cb_hori_scaler = hori_scaler.clone();
+        let cb_scaler = scaler.clone();
         let cb_focused = focused.clone();
 
         window_hook_ids.push(window.on_press(Qwerty::ArrowDown, move |_, w_state, _| {
             if cb_focused.load(atomic::Ordering::SeqCst) {
-                let step = cb_hori_scaler.step_size(w_state);
-                cb_hori_scaler.decrement(step);
+                let step = cb_scaler.step_size(w_state);
+                cb_scaler.decrement(step);
             }
 
             Default::default()
         }));
 
-        let cb_hori_scaler = hori_scaler.clone();
+        let cb_scaler = scaler.clone();
         let cb_focused = focused.clone();
 
         window_hook_ids.push(window.on_press(Qwerty::ArrowLeft, move |_, w_state, _| {
             if cb_focused.load(atomic::Ordering::SeqCst) {
-                let step = cb_hori_scaler.step_size(w_state);
-                cb_hori_scaler.decrement(step);
+                let step = cb_scaler.step_size(w_state);
+                cb_scaler.decrement(step);
             }
 
             Default::default()
         }));
 
         for window_hook_id in window_hook_ids {
-            hori_scaler.container.attach_input_hook(window_hook_id);
+            scaler.container.attach_input_hook(window_hook_id);
         }
 
-        hori_scaler.style_update();
-        Ok(hori_scaler)
+        scaler.style_update();
+        Ok(scaler)
     }
 }
 
-/// Horizonal scaler widget
-pub struct HoriScaler {
+/// Scaler widget
+pub struct Scaler {
     theme: Theme,
     props: Properties,
     container: Arc<Bin>,
@@ -366,10 +398,10 @@ pub struct HoriScaler {
 
 struct State {
     val: RefCell<f32>,
-    on_change: RefCell<Vec<Box<dyn FnMut(&Arc<HoriScaler>, f32) + Send + 'static>>>,
+    on_change: RefCell<Vec<Box<dyn FnMut(&Arc<Scaler>, f32) + Send + 'static>>>,
 }
 
-impl HoriScaler {
+impl Scaler {
     fn step_size(&self, w_state: &WindowState) -> f32 {
         if w_state.is_key_pressed(Qwerty::LCtrl) || w_state.is_key_pressed(Qwerty::RCtrl) {
             self.props.medium_step
@@ -387,9 +419,9 @@ impl HoriScaler {
     /// Set the value to the provided valued.
     ///
     /// **Notes**:
-    /// - This will be effected by rounding provided by [`HoriScalerBuilder::round`].
-    /// - This value will be clamped to values provided by [`HoriScalerBuilder::min_value`]
-    /// and [`HoriScalerBuilder::max_value`].
+    /// - This will be effected by rounding provided by [`ScalerBuilder::round`].
+    /// - This value will be clamped to values provided by [`ScalerBuilder::min_value`]
+    /// and [`ScalerBuilder::max_value`].
     pub fn set(self: &Arc<Self>, mut val: f32) {
         val = match self.props.round {
             ScalerRound::None => val,
@@ -399,14 +431,18 @@ impl HoriScaler {
         .clamp(self.props.min, self.props.max);
 
         let pct = ((val - self.props.min) / (self.props.max - self.props.min)) * 100.0;
+        let mut knob_style = self.knob.style_copy();
 
-        self.knob
-            .style_update(BinStyle {
-                pos_from_l_pct: Some(pct),
-                ..self.knob.style_copy()
-            })
-            .expect_valid();
+        match self.props.orientation {
+            ScalerOrientation::Horizontal => {
+                knob_style.pos_from_l_pct = Some(pct);
+            },
+            ScalerOrientation::Vertical => {
+                knob_style.pos_from_b_pct = Some(pct);
+            },
+        }
 
+        self.knob.style_update(knob_style).expect_valid();
         let state = self.state.lock();
         *state.val.borrow_mut() = val;
 
@@ -425,9 +461,9 @@ impl HoriScaler {
     /// Increment the value by the provided amount.
     ///
     /// **Notes**:
-    /// - The resulting value will be effected by rounding provided by [`HoriScalerBuilder::round`].
-    /// - The resulting value will be clamped to values provided by [`HoriScalerBuilder::min_value`]
-    /// and [`HoriScalerBuilder::max_value`].
+    /// - The resulting value will be effected by rounding provided by [`ScalerBuilder::round`].
+    /// - The resulting value will be clamped to values provided by [`ScalerBuilder::min_value`]
+    /// and [`ScalerBuilder::max_value`].
     pub fn increment(self: &Arc<Self>, amt: f32) {
         let state = self.state.lock();
         let val = *state.val.borrow() + amt;
@@ -437,16 +473,16 @@ impl HoriScaler {
     /// Decrement the value by the provided amount.
     ///
     /// **Notes**:
-    /// - The resulting value will be effected by rounding provided by [`HoriScalerBuilder::round`].
-    /// - The resulting value will be clamped to values provided by [`HoriScalerBuilder::min_value`]
-    /// and [`HoriScalerBuilder::max_value`].
+    /// - The resulting value will be effected by rounding provided by [`ScalerBuilder::round`].
+    /// - The resulting value will be clamped to values provided by [`ScalerBuilder::min_value`]
+    /// and [`ScalerBuilder::max_value`].
     pub fn decrement(self: &Arc<Self>, amt: f32) {
         let state = self.state.lock();
         let val = *state.val.borrow() - amt;
         self.set(val);
     }
 
-    /// Add a callback to be called when the [`HoriScaler`]'s value changed.
+    /// Add a callback to be called when the [`Scaler`]'s value changed.
     ///
     /// **Note**: When changing the value within the callback, no callbacks will be called with
     ///  the updated value.
@@ -454,7 +490,7 @@ impl HoriScaler {
     /// **Panics**: When adding a callback within the callback.
     pub fn on_change<F>(&self, on_change: F)
     where
-        F: FnMut(&Arc<HoriScaler>, f32) + Send + 'static,
+        F: FnMut(&Arc<Scaler>, f32) + Send + 'static,
     {
         self.state
             .lock()
@@ -464,18 +500,56 @@ impl HoriScaler {
     }
 
     fn style_update(self: &Arc<Self>) {
-        let widget_height = match self.props.height {
-            Some(height) => height,
-            None => self.theme.spacing * 2.0,
-        };
+        let [
+            widget_width,
+            widget_height,
+            track_space,
+            track_size,
+            knob_size,
+        ] = match self.props.orientation {
+            ScalerOrientation::Horizontal => {
+                let widget_height = match self.props.height {
+                    Some(height) => height,
+                    None => self.theme.base_size,
+                };
 
-        let widget_width = match self.props.width {
-            Some(width) => width.max(widget_height),
-            None => widget_height * 4.0,
-        };
+                let widget_width = match self.props.width {
+                    Some(width) => width.max(widget_height),
+                    None => widget_height * 4.0,
+                };
 
-        let widget_height_1_2 = widget_height / 2.0;
-        let widget_height_1_4 = widget_height / 4.0;
+                let track_space = widget_height / 4.0;
+                let track_size = widget_height - (track_space * 2.0);
+                [
+                    widget_width,
+                    widget_height,
+                    track_space,
+                    track_size,
+                    widget_height,
+                ]
+            },
+            ScalerOrientation::Vertical => {
+                let widget_width = match self.props.width {
+                    Some(width) => width,
+                    None => self.theme.base_size,
+                };
+
+                let widget_height = match self.props.height {
+                    Some(height) => height.max(widget_width),
+                    None => widget_width * 4.0,
+                };
+
+                let track_space = widget_width / 4.0;
+                let track_size = widget_width - (track_space * 2.0);
+                [
+                    widget_width,
+                    widget_height,
+                    track_space,
+                    track_size,
+                    widget_width,
+                ]
+            },
+        };
 
         let pct = ((*self.state.lock().val.borrow() - self.props.min)
             / (self.props.max - self.props.min))
@@ -494,51 +568,73 @@ impl HoriScaler {
 
         let mut track_style = BinStyle {
             position: Some(BinPosition::Parent),
-            pos_from_t: Some(widget_height_1_4),
-            pos_from_b: Some(widget_height_1_4),
-            pos_from_l: Some(0.0),
-            pos_from_r: Some(0.0),
-            back_color: Some(self.theme.colors.back4),
-            border_radius_tl: Some(widget_height_1_4),
-            border_radius_tr: Some(widget_height_1_4),
-            border_radius_bl: Some(widget_height_1_4),
-            border_radius_br: Some(widget_height_1_4),
+            back_color: Some(self.theme.colors.back3),
+            border_radius_tl: Some(track_size / 2.0),
+            border_radius_tr: Some(track_size / 2.0),
+            border_radius_bl: Some(track_size / 2.0),
+            border_radius_br: Some(track_size / 2.0),
             ..Default::default()
         };
 
-        let confine_style = BinStyle {
+        let mut confine_style = BinStyle {
             position: Some(BinPosition::Parent),
-            pos_from_t: Some(0.0),
             pos_from_b: Some(0.0),
             pos_from_l: Some(0.0),
-            pos_from_r: Some(widget_height),
-            overflow_x: Some(true),
             ..Default::default()
         };
 
         let mut knob_style = BinStyle {
             position: Some(BinPosition::Parent),
-            pos_from_t: Some(0.0),
-            pos_from_b: Some(0.0),
-            pos_from_l_pct: Some(pct),
-            width: Some(widget_height),
             back_color: Some(self.theme.colors.accent1),
-            border_radius_tl: Some(widget_height_1_2),
-            border_radius_tr: Some(widget_height_1_2),
-            border_radius_bl: Some(widget_height_1_2),
-            border_radius_br: Some(widget_height_1_2),
+            border_radius_tl: Some(knob_size / 2.0),
+            border_radius_tr: Some(knob_size / 2.0),
+            border_radius_bl: Some(knob_size / 2.0),
+            border_radius_br: Some(knob_size / 2.0),
             ..Default::default()
         };
+
+        match self.props.orientation {
+            ScalerOrientation::Horizontal => {
+                track_style.pos_from_t = Some(track_space);
+                track_style.pos_from_b = Some(track_space);
+                track_style.pos_from_l = Some(0.0);
+                track_style.pos_from_r = Some(0.0);
+
+                confine_style.pos_from_t = Some(0.0);
+                confine_style.pos_from_r = Some(widget_height);
+                confine_style.overflow_x = Some(true);
+
+                knob_style.pos_from_t = Some(0.0);
+                knob_style.pos_from_b = Some(0.0);
+                knob_style.pos_from_l_pct = Some(pct);
+                knob_style.width = Some(knob_size);
+            },
+            ScalerOrientation::Vertical => {
+                track_style.pos_from_t = Some(0.0);
+                track_style.pos_from_b = Some(0.0);
+                track_style.pos_from_l = Some(track_space);
+                track_style.pos_from_r = Some(track_space);
+
+                confine_style.pos_from_t = Some(widget_width);
+                confine_style.pos_from_r = Some(0.0);
+                confine_style.overflow_y = Some(true);
+
+                knob_style.pos_from_l = Some(0.0);
+                knob_style.pos_from_r = Some(0.0);
+                knob_style.pos_from_b_pct = Some(pct);
+                knob_style.height = Some(knob_size);
+            },
+        }
 
         if let Some(border_size) = self.theme.border {
             track_style.border_size_t = Some(border_size);
             track_style.border_size_b = Some(border_size);
             track_style.border_size_l = Some(border_size);
             track_style.border_size_r = Some(border_size);
-            track_style.border_color_t = Some(self.theme.colors.border1);
-            track_style.border_color_b = Some(self.theme.colors.border1);
-            track_style.border_color_l = Some(self.theme.colors.border1);
-            track_style.border_color_r = Some(self.theme.colors.border1);
+            track_style.border_color_t = Some(self.theme.colors.border3);
+            track_style.border_color_b = Some(self.theme.colors.border3);
+            track_style.border_color_l = Some(self.theme.colors.border3);
+            track_style.border_color_r = Some(self.theme.colors.border3);
             knob_style.border_size_t = Some(border_size);
             knob_style.border_size_b = Some(border_size);
             knob_style.border_size_l = Some(border_size);

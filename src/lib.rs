@@ -9,14 +9,13 @@ pub mod error;
 
 mod button;
 mod check_box;
-mod hori_scaler;
 mod progress_bar;
 mod radio_button;
+mod scaler;
 mod spin_button;
 mod switch_button;
 mod theme;
 mod toggle_button;
-mod vert_scaler;
 
 use std::sync::Arc;
 
@@ -26,14 +25,13 @@ use basalt::window::Window;
 use self::builder::WidgetBuilder;
 pub use self::button::Button;
 pub use self::check_box::CheckBox;
-pub use self::hori_scaler::{HoriScaler, ScalerRound};
 pub use self::progress_bar::ProgressBar;
 pub use self::radio_button::{RadioButton, RadioButtonGroup};
+pub use self::scaler::{Scaler, ScalerOrientation, ScalerRound};
 pub use self::spin_button::SpinButton;
 pub use self::switch_button::SwitchButton;
 pub use self::theme::{Theme, ThemeColors};
 pub use self::toggle_button::ToggleButton;
-pub use self::vert_scaler::VertScaler;
 
 /// Trait used by containers that support containing widgets.
 pub trait WidgetContainer {
