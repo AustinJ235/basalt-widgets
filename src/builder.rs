@@ -5,6 +5,7 @@ pub use crate::check_box::CheckBoxBuilder;
 pub use crate::progress_bar::ProgressBarBuilder;
 pub use crate::radio_button::RadioButtonBuilder;
 pub use crate::scaler::ScalerBuilder;
+pub use crate::scroll_bar::ScrollBarBuilder;
 pub use crate::spin_button::SpinButtonBuilder;
 pub use crate::switch_button::SwitchButtonBuilder;
 pub use crate::toggle_button::ToggleButtonBuilder;
@@ -84,5 +85,13 @@ where
         T: Send + Sync + 'static,
     {
         CheckBoxBuilder::with_builder(self, value)
+    }
+
+    /// Transition into building a [`ScrollBar`](crate::ScrollBar)
+    pub fn scroll_bar<T>(self, target: T) -> ScrollBarBuilder<'a, C>
+    where
+        T: WidgetContainer,
+    {
+        ScrollBarBuilder::with_builder(self, target)
     }
 }
