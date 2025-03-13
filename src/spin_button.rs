@@ -9,11 +9,11 @@ use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
 use crate::button::button_hooks;
-use crate::{Theme, WidgetParent};
+use crate::{Theme, WidgetContainer};
 
 /// Builder for [`SpinButton`]
-pub struct SpinButtonBuilder {
-    widget: WidgetBuilder,
+pub struct SpinButtonBuilder<'a, C> {
+    widget: WidgetBuilder<'a, C>,
     props: Properties,
     on_change: Vec<Box<dyn FnMut(&Arc<SpinButton>, i32) + Send + 'static>>,
 }
@@ -57,8 +57,11 @@ impl Default for Properties {
     }
 }
 
-impl SpinButtonBuilder {
-    pub(crate) fn with_builder(builder: WidgetBuilder) -> Self {
+impl<'a, C> SpinButtonBuilder<'a, C>
+where
+    C: WidgetContainer,
+{
+    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
         Self {
             widget: builder,
             props: Default::default(),
@@ -166,17 +169,23 @@ impl SpinButtonBuilder {
             return Err(SpinButtonError::SetValNotInRange);
         }
 
-        let window = self.widget.parent.window();
-        let mut bins = window.new_bins(4).into_iter();
-        let container = bins.next().unwrap();
-        let entry = bins.next().unwrap();
-        let sub_button = bins.next().unwrap();
-        let add_button = bins.next().unwrap();
+        let window = self
+            .widget
+            .container
+            .container_bin()
+            .window()
+            .expect("The widget container must have an associated window.");
 
-        match &self.widget.parent {
-            WidgetParent::Bin(parent) => parent.add_child(container.clone()),
-            _ => unimplemented!(),
-        }
+        let mut new_bins = window.new_bins(4).into_iter();
+        let container = new_bins.next().unwrap();
+        let entry = new_bins.next().unwrap();
+        let sub_button = new_bins.next().unwrap();
+        let add_button = new_bins.next().unwrap();
+
+        self.widget
+            .container
+            .container_bin()
+            .add_child(container.clone());
 
         container.add_child(entry.clone());
         container.add_child(sub_button.clone());

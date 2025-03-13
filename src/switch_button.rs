@@ -6,11 +6,11 @@ use basalt::interface::{Bin, BinPosition, BinStyle};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetParent};
+use crate::{Theme, WidgetContainer};
 
 /// Builder for [`SwitchButton`]
-pub struct SwitchButtonBuilder {
-    widget: WidgetBuilder,
+pub struct SwitchButtonBuilder<'a, C> {
+    widget: WidgetBuilder<'a, C>,
     props: Properties,
     on_change: Vec<Box<dyn FnMut(&Arc<SwitchButton>, bool) + Send + 'static>>,
 }
@@ -22,8 +22,11 @@ struct Properties {
     height: Option<f32>,
 }
 
-impl SwitchButtonBuilder {
-    pub(crate) fn with_builder(builder: WidgetBuilder) -> Self {
+impl<'a, C> SwitchButtonBuilder<'a, C>
+where
+    C: WidgetContainer,
+{
+    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
         Self {
             widget: builder,
             props: Default::default(),
@@ -67,15 +70,21 @@ impl SwitchButtonBuilder {
 
     /// Finish building the [`SwitchButton`].
     pub fn build(self) -> Arc<SwitchButton> {
-        let window = self.widget.parent.window();
-        let mut bins = window.new_bins(2).into_iter();
-        let container = bins.next().unwrap();
-        let knob = bins.next().unwrap();
+        let window = self
+            .widget
+            .container
+            .container_bin()
+            .window()
+            .expect("The widget container must have an associated window.");
 
-        match &self.widget.parent {
-            WidgetParent::Bin(parent) => parent.add_child(container.clone()),
-            _ => unimplemented!(),
-        }
+        let mut new_bins = window.new_bins(2).into_iter();
+        let container = new_bins.next().unwrap();
+        let knob = new_bins.next().unwrap();
+
+        self.widget
+            .container
+            .container_bin()
+            .add_child(container.clone());
 
         container.add_child(knob.clone());
         let enabled = self.props.enabled;

@@ -6,11 +6,11 @@ use basalt::interface::{Bin, BinPosition, BinStyle};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetParent};
+use crate::{Theme, WidgetContainer};
 
 /// Builder for [`ProgressBar`].
-pub struct ProgressBarBuilder {
-    widget: WidgetBuilder,
+pub struct ProgressBarBuilder<'a, C> {
+    widget: WidgetBuilder<'a, C>,
     props: Properties,
     on_press: Vec<Box<dyn FnMut(&Arc<ProgressBar>, f32) + Send + 'static>>,
 }
@@ -22,8 +22,11 @@ struct Properties {
     height: Option<f32>,
 }
 
-impl ProgressBarBuilder {
-    pub(crate) fn with_builder(builder: WidgetBuilder) -> Self {
+impl<'a, C> ProgressBarBuilder<'a, C>
+where
+    C: WidgetContainer,
+{
+    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
         Self {
             widget: builder,
             props: Default::default(),
@@ -66,15 +69,21 @@ impl ProgressBarBuilder {
 
     /// Finish building the [`ProgressBar`].
     pub fn build(self) -> Arc<ProgressBar> {
-        let window = self.widget.parent.window();
-        let mut bins = window.new_bins(2).into_iter();
-        let container = bins.next().unwrap();
-        let fill = bins.next().unwrap();
+        let window = self
+            .widget
+            .container
+            .container_bin()
+            .window()
+            .expect("The widget container must have an associated window.");
 
-        match &self.widget.parent {
-            WidgetParent::Bin(parent) => parent.add_child(container.clone()),
-            _ => unimplemented!(),
-        }
+        let mut new_bins = window.new_bins(2).into_iter();
+        let container = new_bins.next().unwrap();
+        let fill = new_bins.next().unwrap();
+
+        self.widget
+            .container
+            .container_bin()
+            .add_child(container.clone());
 
         container.add_child(fill.clone());
         let initial_pct = self.props.pct;

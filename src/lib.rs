@@ -20,7 +20,6 @@ mod toggle_button;
 use std::sync::Arc;
 
 use basalt::interface::Bin;
-use basalt::window::Window;
 
 use self::builder::WidgetBuilder;
 pub use self::button::Button;
@@ -34,34 +33,20 @@ pub use self::theme::{Theme, ThemeColors};
 pub use self::toggle_button::ToggleButton;
 
 /// Trait used by containers that support containing widgets.
-pub trait WidgetContainer {
-    fn create_widget(&self) -> WidgetBuilder;
-    // fn container_bin(&self) -> &Arc<Bin>;
-    // fn default_theme(&self) -> Option<Theme>;
-}
+pub trait WidgetContainer: Sized {
+    fn container_bin(&self) -> &Arc<Bin>;
 
-impl WidgetContainer for Arc<Window> {
-    fn create_widget(&self) -> WidgetBuilder {
-        WidgetBuilder::with_window(self.clone())
+    fn create_widget(&self) -> WidgetBuilder<Self> {
+        WidgetBuilder::from(self)
+    }
+
+    fn default_theme(&self) -> Theme {
+        Theme::default()
     }
 }
 
 impl WidgetContainer for Arc<Bin> {
-    fn create_widget(&self) -> WidgetBuilder {
-        WidgetBuilder::with_bin(self.clone())
-    }
-}
-
-enum WidgetParent {
-    Window(Arc<Window>),
-    Bin(Arc<Bin>),
-}
-
-impl WidgetParent {
-    fn window(&self) -> Arc<Window> {
-        match self {
-            Self::Window(window) => window.clone(),
-            Self::Bin(bin) => bin.window().unwrap(),
-        }
+    fn container_bin(&self) -> &Arc<Bin> {
+        self
     }
 }

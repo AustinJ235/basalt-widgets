@@ -7,11 +7,11 @@ use basalt::interface::{Bin, BinPosition, BinStyle, TextHoriAlign, TextVertAlign
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetParent};
+use crate::{Theme, WidgetContainer};
 
 /// Builder for [`ToggleButton`]
-pub struct ToggleButtonBuilder {
-    widget: WidgetBuilder,
+pub struct ToggleButtonBuilder<'a, C> {
+    widget: WidgetBuilder<'a, C>,
     props: Properties,
     on_change: Vec<Box<dyn FnMut(&Arc<ToggleButton>, bool) + Send + 'static>>,
 }
@@ -26,8 +26,11 @@ struct Properties {
     text_height: Option<f32>,
 }
 
-impl ToggleButtonBuilder {
-    pub(crate) fn with_builder(builder: WidgetBuilder) -> Self {
+impl<'a, C> ToggleButtonBuilder<'a, C>
+where
+    C: WidgetContainer,
+{
+    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
         Self {
             widget: builder,
             props: Default::default(),
@@ -99,13 +102,19 @@ impl ToggleButtonBuilder {
 
     /// Finish building the [`ToggleButton`].
     pub fn build(self) -> Arc<ToggleButton> {
-        let window = self.widget.parent.window();
+        let window = self
+            .widget
+            .container
+            .container_bin()
+            .window()
+            .expect("The widget container must have an associated window.");
+
         let container = window.new_bin();
 
-        match &self.widget.parent {
-            WidgetParent::Bin(parent) => parent.add_child(container.clone()),
-            _ => unimplemented!(),
-        }
+        self.widget
+            .container
+            .container_bin()
+            .add_child(container.clone());
 
         let enabled = self.props.enabled;
 

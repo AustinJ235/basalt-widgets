@@ -8,7 +8,7 @@ use basalt::interface::{Bin, BinPosition, BinStyle};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetParent};
+use crate::{Theme, WidgetContainer};
 
 static GROUP_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -22,8 +22,8 @@ pub enum RadioButtonError {
 }
 
 /// Builder for [`RadioButton`]
-pub struct RadioButtonBuilder<T> {
-    widget: WidgetBuilder,
+pub struct RadioButtonBuilder<'a, C, T> {
+    widget: WidgetBuilder<'a, C>,
     props: Properties<T>,
     selected: bool,
     group: Option<Arc<RadioButtonGroup<T>>>,
@@ -34,11 +34,12 @@ struct Properties<T> {
     value: T,
 }
 
-impl<T> RadioButtonBuilder<T>
+impl<'a, C, T> RadioButtonBuilder<'a, C, T>
 where
+    C: WidgetContainer,
     T: Send + Sync + 'static,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder, value: T) -> Self {
+    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>, value: T) -> Self {
         Self {
             widget: builder,
             props: Properties {
@@ -83,15 +84,21 @@ where
 
     /// Finish building the [`RadioButton`].
     pub fn build(self) -> Arc<RadioButton<T>> {
-        let window = self.widget.parent.window();
-        let mut bins = window.new_bins(2).into_iter();
-        let container = bins.next().unwrap();
-        let fill = bins.next().unwrap();
+        let window = self
+            .widget
+            .container
+            .container_bin()
+            .window()
+            .expect("The widget container must have an associated window.");
 
-        match &self.widget.parent {
-            WidgetParent::Bin(parent) => parent.add_child(container.clone()),
-            _ => unimplemented!(),
-        }
+        let mut new_bins = window.new_bins(2).into_iter();
+        let container = new_bins.next().unwrap();
+        let fill = new_bins.next().unwrap();
+
+        self.widget
+            .container
+            .container_bin()
+            .add_child(container.clone());
 
         container.add_child(fill.clone());
 
