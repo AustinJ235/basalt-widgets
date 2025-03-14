@@ -355,7 +355,7 @@ impl ScrollBar {
 
             [
                 100.0 - bar_space,
-                (target_state.scroll / target_state.overflow) * bar_space
+                (target_state.scroll / target_state.overflow) * bar_space,
             ]
         };
 
@@ -393,10 +393,10 @@ impl ScrollBar {
         }
 
         if target_style_update {
-            self.props.target.style_update(target_style).expect_valid();
+            Bin::style_update_batch([(&self.props.target, target_style), (&self.bar, bar_style)]);
+        } else {
+            self.bar.style_update(bar_style).expect_valid();
         }
-
-        self.bar.style_update(bar_style).expect_valid();
     }
 
     fn style_update(&self) {
@@ -523,11 +523,13 @@ impl ScrollBar {
             bar_style.border_radius_br = Some(bar_size_1_2);
         }
 
-        self.container.style_update(container_style).expect_valid();
-        self.incr.style_update(incr_style).expect_valid();
-        self.decr.style_update(decr_style).expect_valid();
-        self.confine.style_update(confine_style).expect_valid();
-        self.bar.style_update(bar_style).expect_valid();
+        Bin::style_update_batch([
+            (&self.container, container_style),
+            (&self.incr, incr_style),
+            (&self.decr, decr_style),
+            (&self.confine, confine_style),
+            (&self.bar, bar_style),
+        ]);
     }
 }
 

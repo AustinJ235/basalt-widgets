@@ -252,8 +252,7 @@ impl<T> CheckBox<T> {
             fill_style.hidden = None;
         }
 
-        self.container.style_update(container_style).expect_valid();
-        self.fill.style_update(fill_style).expect_valid();
+        Bin::style_update_batch([(&self.container, container_style), (&self.fill, fill_style)]);
     }
 }
 

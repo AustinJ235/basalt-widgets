@@ -149,35 +149,41 @@ impl SwitchButton {
         };
 
         if enabled {
-            self.container
-                .style_update(BinStyle {
-                    back_color: Some(self.theme.colors.accent1),
-                    ..self.container.style_copy()
-                })
-                .expect_valid();
-
-            self.knob
-                .style_update(BinStyle {
-                    pos_from_r: Some(widget_height * 0.1),
-                    pos_from_l: None,
-                    ..self.knob.style_copy()
-                })
-                .expect_valid();
+            Bin::style_update_batch([
+                (
+                    &self.container,
+                    BinStyle {
+                        back_color: Some(self.theme.colors.accent1),
+                        ..self.container.style_copy()
+                    },
+                ),
+                (
+                    &self.knob,
+                    BinStyle {
+                        pos_from_r: Some(widget_height * 0.1),
+                        pos_from_l: None,
+                        ..self.knob.style_copy()
+                    },
+                ),
+            ]);
         } else {
-            self.container
-                .style_update(BinStyle {
-                    back_color: Some(self.theme.colors.back3),
-                    ..self.container.style_copy()
-                })
-                .expect_valid();
-
-            self.knob
-                .style_update(BinStyle {
-                    pos_from_l: Some(widget_height * 0.1),
-                    pos_from_r: None,
-                    ..self.knob.style_copy()
-                })
-                .expect_valid();
+            Bin::style_update_batch([
+                (
+                    &self.container,
+                    BinStyle {
+                        back_color: Some(self.theme.colors.back3),
+                        ..self.container.style_copy()
+                    },
+                ),
+                (
+                    &self.knob,
+                    BinStyle {
+                        pos_from_l: Some(widget_height * 0.1),
+                        pos_from_r: None,
+                        ..self.knob.style_copy()
+                    },
+                ),
+            ]);
         }
 
         if let Ok(mut on_change_cbs) = state.on_change.try_borrow_mut() {
@@ -288,7 +294,6 @@ impl SwitchButton {
             knob_style.border_color_r = Some(self.theme.colors.border3);
         }
 
-        self.container.style_update(container_style).expect_valid();
-        self.knob.style_update(knob_style).expect_valid();
+        Bin::style_update_batch([(&self.container, container_style), (&self.knob, knob_style)]);
     }
 }

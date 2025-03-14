@@ -244,7 +244,6 @@ impl ProgressBar {
             fill_style.border_radius_br = Some(radius);
         }
 
-        self.container.style_update(container_style).expect_valid();
-        self.fill.style_update(fill_style).expect_valid();
+        Bin::style_update_batch([(&self.container, container_style), (&self.fill, fill_style)]);
     }
 }

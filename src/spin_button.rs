@@ -583,16 +583,12 @@ impl SpinButton {
             },
         }
 
-        self.container.style_update(container_style).expect_valid();
-        self.entry.style_update(entry_style).expect_valid();
-
-        self.sub_button
-            .style_update(sub_button_style)
-            .expect_valid();
-
-        self.add_button
-            .style_update(add_button_style)
-            .expect_valid();
+        Bin::style_update_batch([
+            (&self.container, container_style),
+            (&self.entry, entry_style),
+            (&self.sub_button, sub_button_style),
+            (&self.add_button, add_button_style),
+        ]);
     }
 }
 

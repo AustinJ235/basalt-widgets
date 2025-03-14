@@ -654,9 +654,11 @@ impl Scaler {
             knob_style.border_color_r = Some(self.theme.colors.border3);
         }
 
-        self.container.style_update(container_style).expect_valid();
-        self.track.style_update(track_style).expect_valid();
-        self.confine.style_update(confine_style).expect_valid();
-        self.knob.style_update(knob_style).expect_valid();
+        Bin::style_update_batch([
+            (&self.container, container_style),
+            (&self.track, track_style),
+            (&self.confine, confine_style),
+            (&self.knob, knob_style),
+        ]);
     }
 }

@@ -198,7 +198,8 @@ fn main() {
                 back_color: Some(theme.colors.back3),
                 text: format!("{}", i),
                 ..Default::default()
-            }).expect_valid();
+            })
+            .expect_valid();
         }
 
         let _scroll_bar = scroll_area_container
