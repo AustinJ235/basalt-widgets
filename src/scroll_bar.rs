@@ -232,11 +232,12 @@ where
                         return IntvlHookCtrl::Pause;
                     }
 
-                    scroll_bar.scroll_na(smooth_state.steps.pop_front().unwrap());
+                    scroll_bar.scroll_no_anim(smooth_state.steps.pop_front().unwrap());
                     IntvlHookCtrl::Continue
                 },
             );
 
+            scroll_bar.container.attach_intvl_hook(intvl_hook_id);
             scroll_bar.state.lock().smooth.borrow_mut().intvl_hook_id = Some(intvl_hook_id);
         }
 
@@ -281,7 +282,7 @@ impl ScrollBar {
         let state = self.state.lock();
 
         if !self.props.accel && !self.props.smooth {
-            self.scroll_na(amt);
+            self.scroll_no_anim(amt);
             return;
         }
 
@@ -323,7 +324,7 @@ impl ScrollBar {
             .start(smooth_state.intvl_hook_id.unwrap());
     }
 
-    fn scroll_na(&self, amt: f32) {
+    fn scroll_no_anim(&self, amt: f32) {
         let state = self.state.lock();
         let mut update = self.check_target_state();
 
@@ -364,6 +365,7 @@ impl ScrollBar {
 
         {
             let mut target_state = state.target.borrow_mut();
+            state.smooth.borrow_mut().steps.clear();
 
             if to > target_state.overflow {
                 if target_state.scroll != target_state.overflow {
@@ -389,6 +391,7 @@ impl ScrollBar {
 
         {
             let mut target_state = state.target.borrow_mut();
+            state.smooth.borrow_mut().steps.clear();
 
             if target_state.scroll != 0.0 {
                 target_state.scroll = 0.0;
@@ -407,6 +410,7 @@ impl ScrollBar {
 
         {
             let mut target_state = state.target.borrow_mut();
+            state.smooth.borrow_mut().steps.clear();
 
             if target_state.scroll != target_state.overflow {
                 target_state.scroll = target_state.overflow;
