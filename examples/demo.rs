@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use basalt::interface::BinStyle;
+use basalt::interface::{BinPosition, BinStyle};
 use basalt::interval::IntvlHookCtrl;
 use basalt::render::{MSAA, Renderer, RendererError};
 use basalt::window::WindowOptions;
@@ -143,6 +143,70 @@ fn main() {
         let _check_a = background.create_widget().check_box(()).build();
         let _check_b = background.create_widget().check_box(()).build();
         let _check_c = background.create_widget().check_box(()).build();
+
+        // -- ScrollBar Testing -- //
+
+        let scroll_area_container = window.new_bin();
+        let scroll_area = window.new_bin();
+        background.add_child(scroll_area_container.clone());
+        scroll_area_container.add_child(scroll_area.clone());
+
+        scroll_area_container
+            .style_update(BinStyle {
+                position: Some(BinPosition::Floating),
+                width: Some(350.0),
+                height: Some(300.0),
+                margin_t: Some(theme.spacing),
+                margin_b: Some(theme.spacing),
+                margin_l: Some(theme.spacing),
+                margin_r: Some(theme.spacing),
+                border_size_t: Some(1.0),
+                border_size_b: Some(1.0),
+                border_size_l: Some(1.0),
+                border_size_r: Some(1.0),
+                border_color_t: Some(theme.colors.border1),
+                border_color_b: Some(theme.colors.border1),
+                border_color_l: Some(theme.colors.border1),
+                border_color_r: Some(theme.colors.border1),
+                ..BinStyle::default()
+            })
+            .expect_valid();
+
+        scroll_area
+            .style_update(BinStyle {
+                position: Some(BinPosition::Parent),
+                pos_from_t: Some(0.0),
+                pos_from_b: Some(0.0),
+                pos_from_l: Some(0.0),
+                pos_from_r: Some((theme.base_size / 1.5).ceil() + 1.0),
+                ..BinStyle::default()
+            })
+            .expect_valid();
+
+        let dummy_bins = window.new_bins(20);
+
+        for (i, bin) in dummy_bins.iter().enumerate() {
+            scroll_area.add_child(bin.clone());
+
+            bin.style_update(BinStyle {
+                position: Some(BinPosition::Parent),
+                pos_from_t: Some(10.0 + (i as f32 * 85.0)),
+                pos_from_l: Some(10.0),
+                pos_from_r: Some(10.0),
+                margin_b: Some(10.0),
+                height: Some(75.0),
+                back_color: Some(theme.colors.back3),
+                text: format!("{}", i),
+                ..Default::default()
+            }).expect_valid();
+        }
+
+        let _scroll_bar = scroll_area_container
+            .create_widget()
+            .scroll_bar(&scroll_area)
+            .build();
+
+        // -- //
 
         let mut renderer = Renderer::new(window).unwrap();
         renderer.interface_only().msaa(MSAA::X4);

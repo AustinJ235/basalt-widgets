@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;
 
-use basalt::interface::{Bin, BinPosition, BinStyle};
+use basalt::interface::{Bin, BinPosition, BinStyle, BinVert, Color};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
@@ -36,7 +36,7 @@ impl Properties {
             target,
             axis: ScrollAxis::Y,
             smooth: true,
-            step: 100.0,
+            step: 50.0,
             accel: true,
             accel_rate: 2.0,
             update_intvl: Duration::from_secs(1) / 120,
@@ -146,6 +146,43 @@ where
                     scroll,
                 }),
             }),
+        });
+
+        let cb_scroll_bar = scroll_bar.clone();
+
+        scroll_bar.props.target.on_update(move |_, _| {
+            cb_scroll_bar.refresh();
+        });
+
+        let cb_scroll_bar = scroll_bar.clone();
+
+        scroll_bar.props.target.on_children_added(move |_, _| {
+            cb_scroll_bar.refresh();
+        });
+
+        let cb_scroll_bar = scroll_bar.clone();
+
+        scroll_bar.props.target.on_children_removed(move |_, _| {
+            cb_scroll_bar.refresh();
+        });
+
+        let cb_scroll_bar = scroll_bar.clone();
+
+        scroll_bar.props.target.on_scroll(move |_, _, y, x| {
+            match cb_scroll_bar.props.axis {
+                ScrollAxis::X => {
+                    if x != 0.0 {
+                        cb_scroll_bar.scroll(x * cb_scroll_bar.props.step);
+                    }
+                },
+                ScrollAxis::Y => {
+                    if y != 0.0 {
+                        cb_scroll_bar.scroll(y * cb_scroll_bar.props.step);
+                    }
+                },
+            }
+
+            Default::default()
         });
 
         // TODO: Hooks and Stuff
@@ -291,21 +328,41 @@ impl ScrollBar {
         let state = self.state.lock();
         let target_overflow = self.target_overflow();
         let mut target_state = state.target.borrow_mut();
-        target_state.overflow = self.target_overflow();
+        let mut update = false;
 
-        if target_overflow > target_state.scroll {
-            target_state.scroll = target_overflow;
-            true
-        } else {
-            false
+        if target_state.overflow != target_overflow {
+            target_state.overflow = target_overflow;
+            update = true;
         }
+
+        if target_overflow < target_state.scroll {
+            target_state.scroll = target_overflow;
+            update = true;
+        }
+
+        update
     }
 
     fn update(&self) {
         let state = self.state.lock();
         let target_state = state.target.borrow();
+        let mut bar_style = self.bar.style_copy();
 
-        // TODO: update visuals
+        let [bar_size_pct, bar_offset_pct] = if target_state.overflow <= 0.0 {
+            [100.0, 0.0]
+        } else {
+            let bar_space = (target_state.overflow / self.props.step).clamp(10.0, 100.0);
+
+            [
+                100.0 - bar_space,
+                (target_state.scroll / target_state.overflow) * bar_space
+            ]
+        };
+
+        println!(
+            "Overflow: {} Px, Scroll: {} Px, Bar Size: {:.1} %, Bar Offset: {:.1} %",
+            target_state.overflow, target_state.scroll, bar_size_pct, bar_offset_pct
+        );
 
         let mut target_style = self.props.target.style_copy();
         let mut target_style_update = false;
@@ -317,6 +374,9 @@ impl ScrollBar {
                 {
                     target_style.scroll_x = Some(target_state.scroll);
                     target_style_update = true;
+
+                    bar_style.pos_from_l_pct = Some(bar_offset_pct);
+                    bar_style.width_pct = Some(bar_size_pct);
                 }
             },
             ScrollAxis::Y => {
@@ -325,6 +385,9 @@ impl ScrollBar {
                 {
                     target_style.scroll_y = Some(target_state.scroll);
                     target_style_update = true;
+
+                    bar_style.pos_from_t_pct = Some(bar_offset_pct);
+                    bar_style.height_pct = Some(bar_size_pct);
                 }
             },
         }
@@ -332,13 +395,18 @@ impl ScrollBar {
         if target_style_update {
             self.props.target.style_update(target_style).expect_valid();
         }
+
+        self.bar.style_update(bar_style).expect_valid();
     }
 
     fn style_update(&self) {
-        let bar_space = (self.theme.spacing / 10.0).ceil();
+        let size = (self.theme.base_size / 1.5).ceil();
+        let spacing = (self.theme.spacing / 10.0).ceil();
+        let border_size = self.theme.border.unwrap_or(0.0);
 
         let mut container_style = BinStyle {
             position: Some(BinPosition::Parent),
+            back_color: Some(self.theme.colors.back2),
             ..Default::default()
         };
 
@@ -359,6 +427,7 @@ impl ScrollBar {
 
         let mut bar_style = BinStyle {
             position: Some(BinPosition::Parent),
+            back_color: Some(self.theme.colors.accent1),
             ..Default::default()
         };
 
@@ -367,22 +436,26 @@ impl ScrollBar {
                 container_style.pos_from_b = Some(0.0);
                 container_style.pos_from_l = Some(0.0);
                 container_style.pos_from_r = Some(0.0);
-                container_style.height = Some(self.theme.base_size);
+                container_style.height = Some(size);
 
                 incr_style.pos_from_t = Some(0.0);
                 incr_style.pos_from_b = Some(0.0);
                 incr_style.pos_from_r = Some(0.0);
-                incr_style.width = Some(self.theme.base_size);
+                incr_style.width = Some(size);
+                incr_style.custom_verts =
+                    right_symbol_verts(size, spacing, self.theme.colors.text1a);
 
                 decr_style.pos_from_t = Some(0.0);
                 decr_style.pos_from_b = Some(0.0);
                 decr_style.pos_from_l = Some(0.0);
-                decr_style.width = Some(self.theme.base_size);
+                decr_style.width = Some(size);
+                decr_style.custom_verts =
+                    left_symbol_verts(size, spacing, self.theme.colors.text1a);
 
-                confine_style.pos_from_t = Some(bar_space);
-                confine_style.pos_from_b = Some(bar_space);
-                confine_style.pos_from_l = Some(self.theme.base_size + bar_space);
-                confine_style.pos_from_r = Some(self.theme.base_size + bar_space);
+                confine_style.pos_from_t = Some(spacing);
+                confine_style.pos_from_b = Some(spacing);
+                confine_style.pos_from_l = Some(size + border_size);
+                confine_style.pos_from_r = Some(size + border_size);
 
                 bar_style.pos_from_t = Some(0.0);
                 bar_style.pos_from_b = Some(0.0);
@@ -393,22 +466,25 @@ impl ScrollBar {
                 container_style.pos_from_t = Some(0.0);
                 container_style.pos_from_b = Some(0.0);
                 container_style.pos_from_r = Some(0.0);
-                container_style.width = Some(self.theme.base_size);
+                container_style.width = Some(size);
 
                 incr_style.pos_from_t = Some(0.0);
                 incr_style.pos_from_l = Some(0.0);
                 incr_style.pos_from_r = Some(0.0);
-                incr_style.height = Some(self.theme.base_size);
+                incr_style.height = Some(size);
+                incr_style.custom_verts = up_symbol_verts(size, spacing, self.theme.colors.text1a);
 
                 decr_style.pos_from_b = Some(0.0);
                 decr_style.pos_from_l = Some(0.0);
                 decr_style.pos_from_r = Some(0.0);
-                decr_style.height = Some(self.theme.base_size);
+                decr_style.height = Some(size);
+                decr_style.custom_verts =
+                    down_symbol_verts(size, spacing, self.theme.colors.text1a);
 
-                confine_style.pos_from_t = Some(self.theme.base_size + bar_space);
-                confine_style.pos_from_b = Some(self.theme.base_size + bar_space);
-                confine_style.pos_from_l = Some(bar_space);
-                confine_style.pos_from_b = Some(bar_space);
+                confine_style.pos_from_t = Some(size + border_size);
+                confine_style.pos_from_b = Some(size + border_size);
+                confine_style.pos_from_l = Some(spacing);
+                confine_style.pos_from_r = Some(spacing);
 
                 bar_style.pos_from_t_pct = Some(0.0);
                 bar_style.pos_from_l = Some(0.0);
@@ -417,10 +493,79 @@ impl ScrollBar {
             },
         }
 
+        if let Some(border_size) = self.theme.border {
+            bar_style.border_size_t = Some(border_size);
+            bar_style.border_size_b = Some(border_size);
+            bar_style.border_size_l = Some(border_size);
+            bar_style.border_size_r = Some(border_size);
+            bar_style.border_color_t = Some(self.theme.colors.border3);
+            bar_style.border_color_b = Some(self.theme.colors.border3);
+            bar_style.border_color_l = Some(self.theme.colors.border3);
+            bar_style.border_color_r = Some(self.theme.colors.border3);
+
+            match self.props.axis {
+                ScrollAxis::X => {
+                    container_style.border_size_t = Some(border_size);
+                    container_style.border_color_t = Some(self.theme.colors.border1);
+                },
+                ScrollAxis::Y => {
+                    container_style.border_size_l = Some(border_size);
+                    container_style.border_color_l = Some(self.theme.colors.border1);
+                },
+            }
+        }
+
+        if self.theme.roundness.is_some() {
+            let bar_size_1_2 = (size - (spacing * 2.0)) / 2.0;
+            bar_style.border_radius_tl = Some(bar_size_1_2);
+            bar_style.border_radius_tr = Some(bar_size_1_2);
+            bar_style.border_radius_bl = Some(bar_size_1_2);
+            bar_style.border_radius_br = Some(bar_size_1_2);
+        }
+
         self.container.style_update(container_style).expect_valid();
         self.incr.style_update(incr_style).expect_valid();
         self.decr.style_update(decr_style).expect_valid();
         self.confine.style_update(confine_style).expect_valid();
         self.bar.style_update(bar_style).expect_valid();
     }
+}
+
+fn up_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
+    const UNIT_POINTS: [[f32; 2]; 3] = [[0.5, 0.25], [0.0, 0.75], [1.0, 0.75]];
+    symbol_verts(target_size, spacing, color, &UNIT_POINTS)
+}
+
+fn down_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
+    const UNIT_POINTS: [[f32; 2]; 3] = [[0.0, 0.25], [1.0, 0.25], [0.5, 0.75]];
+    symbol_verts(target_size, spacing, color, &UNIT_POINTS)
+}
+
+fn left_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
+    const UNIT_POINTS: [[f32; 2]; 3] = [[0.75, 0.25], [0.25, 0.5], [0.75, 0.75]];
+    symbol_verts(target_size, spacing, color, &UNIT_POINTS)
+}
+
+fn right_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
+    const UNIT_POINTS: [[f32; 2]; 3] = [[0.25, 0.25], [0.25, 0.75], [0.75, 0.5]];
+    symbol_verts(target_size, spacing, color, &UNIT_POINTS)
+}
+
+fn symbol_verts(
+    target_size: f32,
+    spacing: f32,
+    color: Color,
+    unit_points: &[[f32; 2]; 3],
+) -> Vec<BinVert> {
+    let size = target_size - (spacing * 2.0);
+    let mut verts = Vec::with_capacity(3);
+
+    for [x, y] in unit_points.iter() {
+        verts.push(BinVert {
+            position: ((*x * size) + spacing, (*y * size) + spacing, 0),
+            color,
+        });
+    }
+
+    verts
 }

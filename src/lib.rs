@@ -52,3 +52,10 @@ impl WidgetContainer for Arc<Bin> {
         self
     }
 }
+
+// TODO: More Generic
+impl WidgetContainer for &Arc<Bin> {
+    fn container_bin(&self) -> &Arc<Bin> {
+        *self
+    }
+}
