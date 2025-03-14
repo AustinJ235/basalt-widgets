@@ -1,8 +1,10 @@
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Duration;
 
 use basalt::interface::{Bin, BinPosition, BinStyle, BinVert, Color};
+use basalt::interval::{IntvlHookCtrl, IntvlHookID};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
@@ -14,20 +16,21 @@ pub enum ScrollAxis {
     Y,
 }
 
-#[allow(dead_code)] // TODO: remove
 struct Properties {
     target: Arc<Bin>,
     axis: ScrollAxis,
     smooth: bool,
     step: f32,
     accel: bool,
-    accel_rate: f32,
+    accel_pow: f32,
+    max_accel_mult: f32,
     update_intvl: Duration,
+    animation_duration: Duration,
 }
 
 #[derive(Default)]
 struct InitialState {
-    scroll: f32,
+    scroll: Option<f32>,
 }
 
 impl Properties {
@@ -38,8 +41,10 @@ impl Properties {
             smooth: true,
             step: 50.0,
             accel: true,
-            accel_rate: 2.0,
+            accel_pow: 1.2,
+            max_accel_mult: 4.0,
             update_intvl: Duration::from_secs(1) / 120,
+            animation_duration: Duration::from_millis(100),
         }
     }
 }
@@ -66,7 +71,7 @@ where
     }
 
     pub fn scroll(mut self, scroll: f32) -> Self {
-        self.initial_state.scroll = scroll;
+        self.initial_state.scroll = Some(scroll);
         self
     }
 
@@ -90,13 +95,23 @@ where
         self
     }
 
-    pub fn accel_rate(mut self, accel_rate: f32) -> Self {
-        self.props.accel_rate = accel_rate;
+    pub fn accel_pow(mut self, accel_pow: f32) -> Self {
+        self.props.accel_pow = accel_pow;
+        self
+    }
+
+    pub fn max_accel_mult(mut self, max_accel_mult: f32) -> Self {
+        self.props.max_accel_mult = max_accel_mult;
         self
     }
 
     pub fn update_hz(mut self, update_hz: u32) -> Self {
         self.props.update_intvl = Duration::from_secs(1) / update_hz;
+        self
+    }
+
+    pub fn animation_duration(mut self, animation_duration: Duration) -> Self {
+        self.props.animation_duration = animation_duration;
         self
     }
 
@@ -125,12 +140,17 @@ where
         container.add_child(confine.clone());
         confine.add_child(bar.clone());
 
-        let overflow = match self.props.axis {
-            ScrollAxis::X => self.props.target.calc_hori_overflow(),
-            ScrollAxis::Y => self.props.target.calc_vert_overflow(),
-        };
-
-        let scroll = self.initial_state.scroll.clamp(0.0, overflow);
+        let scroll = self.initial_state.scroll.unwrap_or_else(|| {
+            self.widget
+                .container
+                .container_bin()
+                .style_inspect(|style| {
+                    match self.props.axis {
+                        ScrollAxis::X => style.scroll_x.unwrap_or(0.0),
+                        ScrollAxis::Y => style.scroll_y.unwrap_or(0.0),
+                    }
+                })
+        });
 
         let scroll_bar = Arc::new(ScrollBar {
             theme: self.widget.theme,
@@ -142,8 +162,13 @@ where
             bar,
             state: ReentrantMutex::new(State {
                 target: RefCell::new(TargetState {
-                    overflow,
+                    overflow: scroll,
                     scroll,
+                }),
+                smooth: RefCell::new(SmoothState {
+                    target: scroll,
+                    steps: VecDeque::new(),
+                    intvl_hook_id: None,
                 }),
             }),
         });
@@ -168,24 +193,56 @@ where
 
         let cb_scroll_bar = scroll_bar.clone();
 
-        scroll_bar.props.target.on_scroll(move |_, _, y, x| {
-            match cb_scroll_bar.props.axis {
-                ScrollAxis::X => {
-                    if x != 0.0 {
-                        cb_scroll_bar.scroll(x * cb_scroll_bar.props.step);
-                    }
-                },
-                ScrollAxis::Y => {
-                    if y != 0.0 {
-                        cb_scroll_bar.scroll(y * cb_scroll_bar.props.step);
-                    }
-                },
-            }
+        scroll_bar
+            .props
+            .target
+            .on_scroll(move |_, _, scroll_y, scroll_x| {
+                match cb_scroll_bar.props.axis {
+                    ScrollAxis::X => {
+                        if scroll_x != 0.0 {
+                            cb_scroll_bar.scroll(scroll_x * cb_scroll_bar.props.step);
+                        }
+                    },
+                    ScrollAxis::Y => {
+                        if scroll_y != 0.0 {
+                            cb_scroll_bar.scroll(scroll_y * cb_scroll_bar.props.step);
+                        }
+                    },
+                }
 
-            Default::default()
-        });
+                Default::default()
+            });
 
-        // TODO: Hooks and Stuff
+        if scroll_bar.props.smooth || scroll_bar.props.accel {
+            let scroll_bar_wk = Arc::downgrade(&scroll_bar);
+
+            let intvl_hook_id = window.basalt_ref().interval_ref().do_every(
+                scroll_bar.props.update_intvl,
+                None,
+                move |_| {
+                    let scroll_bar = match scroll_bar_wk.upgrade() {
+                        Some(some) => some,
+                        None => return IntvlHookCtrl::Remove,
+                    };
+
+                    let state = scroll_bar.state.lock();
+                    let mut smooth_state = state.smooth.borrow_mut();
+
+                    if smooth_state.steps.is_empty() {
+                        return IntvlHookCtrl::Pause;
+                    }
+
+                    scroll_bar.scroll_na(smooth_state.steps.pop_front().unwrap());
+                    IntvlHookCtrl::Continue
+                },
+            );
+
+            scroll_bar.state.lock().smooth.borrow_mut().intvl_hook_id = Some(intvl_hook_id);
+        }
+
+        // TODO: Incr/Decr button hooks
+        // TODO: Bar drag hooks
+        // TODO: Track click hooks
 
         scroll_bar.style_update();
         scroll_bar
@@ -205,6 +262,7 @@ pub struct ScrollBar {
 
 struct State {
     target: RefCell<TargetState>,
+    smooth: RefCell<SmoothState>,
 }
 
 struct TargetState {
@@ -212,8 +270,60 @@ struct TargetState {
     scroll: f32,
 }
 
+struct SmoothState {
+    target: f32,
+    steps: VecDeque<f32>,
+    intvl_hook_id: Option<IntvlHookID>,
+}
+
 impl ScrollBar {
     pub fn scroll(&self, amt: f32) {
+        let state = self.state.lock();
+
+        if !self.props.accel && !self.props.smooth {
+            self.scroll_na(amt);
+            return;
+        }
+
+        let target_state = state.target.borrow();
+        let mut smooth_state = state.smooth.borrow_mut();
+
+        smooth_state.target = if smooth_state.steps.is_empty() {
+            target_state.scroll + amt
+        } else {
+            let direction_changes =
+                (smooth_state.target - target_state.scroll).signum() != amt.signum();
+
+            if self.props.accel {
+                if direction_changes {
+                    target_state.scroll + amt
+                } else {
+                    smooth_state.target
+                        + (((smooth_state.target - target_state.scroll).abs() / self.props.step)
+                            .max(1.0)
+                            .powf(self.props.accel_pow)
+                            .clamp(1.0, self.props.max_accel_mult)
+                            * amt)
+                }
+            } else {
+                if direction_changes {
+                    target_state.scroll + amt
+                } else {
+                    smooth_state.target + amt
+                }
+            }
+        };
+
+        smooth_state.steps =
+            VecDeque::from_iter(self.animation_steps(target_state.scroll, smooth_state.target));
+
+        self.container
+            .basalt_ref()
+            .interval_ref()
+            .start(smooth_state.intvl_hook_id.unwrap());
+    }
+
+    fn scroll_na(&self, amt: f32) {
         let state = self.state.lock();
         let mut update = self.check_target_state();
 
@@ -248,7 +358,7 @@ impl ScrollBar {
         }
     }
 
-    pub fn scroll_to(&self, to: f32) {
+    pub fn jump_to(&self, to: f32) {
         let state = self.state.lock();
         let mut update = self.check_target_state();
 
@@ -343,6 +453,26 @@ impl ScrollBar {
         update
     }
 
+    fn animation_steps(&self, current: f32, target: f32) -> Vec<f32> {
+        const ANIM_POW: f32 = 0.2;
+        let delta = target - current;
+
+        let step_count = (self.props.animation_duration.as_micros() as f32
+            / self.props.update_intvl.as_micros() as f32)
+            .round() as usize;
+
+        let step_base = delta
+            / (1..=step_count)
+                .into_iter()
+                .map(|i| (i as f32 / step_count as f32).powf(ANIM_POW))
+                .sum::<f32>();
+
+        (1..=step_count)
+            .into_iter()
+            .map(|i| (i as f32 / step_count as f32).powf(ANIM_POW) * step_base)
+            .collect()
+    }
+
     fn update(&self) {
         let state = self.state.lock();
         let target_state = state.target.borrow();
@@ -359,10 +489,11 @@ impl ScrollBar {
             ]
         };
 
-        println!(
+        // TODO: Remove This
+        /*println!(
             "Overflow: {} Px, Scroll: {} Px, Bar Size: {:.1} %, Bar Offset: {:.1} %",
             target_state.overflow, target_state.scroll, bar_size_pct, bar_offset_pct
-        );
+        );*/
 
         let mut target_style = self.props.target.style_copy();
         let mut target_style_update = false;
