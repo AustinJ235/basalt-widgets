@@ -8,7 +8,7 @@ use basalt::interface::{
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::button::button_hooks;
+use crate::button::{BtnHookColors, button_hooks};
 use crate::{Theme, WidgetContainer};
 
 /// Builder for [`SpinButton`]
@@ -209,18 +209,15 @@ where
 
         button_hooks(
             &spin_button.sub_button,
-            [
-                spin_button.theme.colors.back3,
-                spin_button.theme.colors.border2,
-            ],
-            [
-                spin_button.theme.colors.accent1,
-                spin_button.theme.colors.back2,
-            ],
-            [
-                spin_button.theme.colors.accent2,
-                spin_button.theme.colors.back2,
-            ],
+            BtnHookColors {
+                back_clr: Some(spin_button.theme.colors.back3),
+                vert_clr: Some(spin_button.theme.colors.border2),
+                h_back_clr: Some(spin_button.theme.colors.accent1),
+                h_vert_clr: Some(spin_button.theme.colors.back2),
+                p_back_clr: Some(spin_button.theme.colors.accent2),
+                p_vert_clr: Some(spin_button.theme.colors.back2),
+                ..Default::default()
+            },
             move |w_state| {
                 let step = cb_spin_button.step_size(w_state);
                 cb_spin_button.decrement(step);
@@ -231,18 +228,15 @@ where
 
         button_hooks(
             &spin_button.add_button,
-            [
-                spin_button.theme.colors.back3,
-                spin_button.theme.colors.border2,
-            ],
-            [
-                spin_button.theme.colors.accent1,
-                spin_button.theme.colors.back2,
-            ],
-            [
-                spin_button.theme.colors.accent2,
-                spin_button.theme.colors.back2,
-            ],
+            BtnHookColors {
+                back_clr: Some(spin_button.theme.colors.back3),
+                vert_clr: Some(spin_button.theme.colors.border2),
+                h_back_clr: Some(spin_button.theme.colors.accent1),
+                h_vert_clr: Some(spin_button.theme.colors.back2),
+                p_back_clr: Some(spin_button.theme.colors.accent2),
+                p_vert_clr: Some(spin_button.theme.colors.back2),
+                ..Default::default()
+            },
             move |w_state| {
                 let step = cb_spin_button.step_size(w_state);
                 cb_spin_button.increment(step);

@@ -8,6 +8,7 @@ use basalt::interval::{IntvlHookCtrl, IntvlHookID};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
+use crate::button::{BtnHookColors, button_hooks};
 use crate::{Theme, WidgetContainer};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,8 +126,8 @@ where
 
         let mut new_bins = window.new_bins(5).into_iter();
         let container = new_bins.next().unwrap();
-        let incr = new_bins.next().unwrap();
-        let decr = new_bins.next().unwrap();
+        let upright = new_bins.next().unwrap();
+        let downleft = new_bins.next().unwrap();
         let confine = new_bins.next().unwrap();
         let bar = new_bins.next().unwrap();
 
@@ -135,8 +136,8 @@ where
             .container_bin()
             .add_child(container.clone());
 
-        container.add_child(incr.clone());
-        container.add_child(decr.clone());
+        container.add_child(upright.clone());
+        container.add_child(downleft.clone());
         container.add_child(confine.clone());
         confine.add_child(bar.clone());
 
@@ -156,8 +157,8 @@ where
             theme: self.widget.theme,
             props: self.props,
             container,
-            incr,
-            decr,
+            upright,
+            downleft,
             confine,
             bar,
             state: ReentrantMutex::new(State {
@@ -213,6 +214,27 @@ where
                 Default::default()
             });
 
+        let cb_scroll_bar = scroll_bar.clone();
+
+        scroll_bar
+            .container
+            .on_scroll(move |_, _, scroll_y, scroll_x| {
+                match cb_scroll_bar.props.axis {
+                    ScrollAxis::X => {
+                        if scroll_x != 0.0 {
+                            cb_scroll_bar.scroll(scroll_x * cb_scroll_bar.props.step);
+                        }
+                    },
+                    ScrollAxis::Y => {
+                        if scroll_y != 0.0 {
+                            cb_scroll_bar.scroll(scroll_y * cb_scroll_bar.props.step);
+                        }
+                    },
+                }
+
+                Default::default()
+            });
+
         if scroll_bar.props.smooth || scroll_bar.props.accel {
             let scroll_bar_wk = Arc::downgrade(&scroll_bar);
 
@@ -241,7 +263,36 @@ where
             scroll_bar.state.lock().smooth.borrow_mut().intvl_hook_id = Some(intvl_hook_id);
         }
 
-        // TODO: Incr/Decr button hooks
+        let cb_scroll_bar = scroll_bar.clone();
+
+        button_hooks(
+            &scroll_bar.upright,
+            BtnHookColors {
+                vert_clr: Some(scroll_bar.theme.colors.border1),
+                h_vert_clr: Some(scroll_bar.theme.colors.border3),
+                p_vert_clr: Some(scroll_bar.theme.colors.border2),
+                ..Default::default()
+            },
+            move |_| {
+                cb_scroll_bar.scroll(-cb_scroll_bar.props.step);
+            },
+        );
+
+        let cb_scroll_bar = scroll_bar.clone();
+
+        button_hooks(
+            &scroll_bar.downleft,
+            BtnHookColors {
+                vert_clr: Some(scroll_bar.theme.colors.border1),
+                h_vert_clr: Some(scroll_bar.theme.colors.border3),
+                p_vert_clr: Some(scroll_bar.theme.colors.border2),
+                ..Default::default()
+            },
+            move |_| {
+                cb_scroll_bar.scroll(cb_scroll_bar.props.step);
+            },
+        );
+
         // TODO: Bar drag hooks
         // TODO: Track click hooks
 
@@ -254,8 +305,8 @@ pub struct ScrollBar {
     theme: Theme,
     props: Properties,
     container: Arc<Bin>,
-    incr: Arc<Bin>,
-    decr: Arc<Bin>,
+    upright: Arc<Bin>,
+    downleft: Arc<Bin>,
     confine: Arc<Bin>,
     bar: Arc<Bin>,
     state: ReentrantMutex<State>,
@@ -545,12 +596,12 @@ impl ScrollBar {
             ..Default::default()
         };
 
-        let mut incr_style = BinStyle {
+        let mut upright_style = BinStyle {
             position: Some(BinPosition::Parent),
             ..Default::default()
         };
 
-        let mut decr_style = BinStyle {
+        let mut downleft_style = BinStyle {
             position: Some(BinPosition::Parent),
             ..Default::default()
         };
@@ -573,19 +624,19 @@ impl ScrollBar {
                 container_style.pos_from_r = Some(0.0);
                 container_style.height = Some(size);
 
-                incr_style.pos_from_t = Some(0.0);
-                incr_style.pos_from_b = Some(0.0);
-                incr_style.pos_from_r = Some(0.0);
-                incr_style.width = Some(size);
-                incr_style.custom_verts =
-                    right_symbol_verts(size, spacing, self.theme.colors.text1a);
+                upright_style.pos_from_t = Some(0.0);
+                upright_style.pos_from_b = Some(0.0);
+                upright_style.pos_from_r = Some(0.0);
+                upright_style.width = Some(size);
+                upright_style.custom_verts =
+                    right_symbol_verts(size, spacing, self.theme.colors.border1);
 
-                decr_style.pos_from_t = Some(0.0);
-                decr_style.pos_from_b = Some(0.0);
-                decr_style.pos_from_l = Some(0.0);
-                decr_style.width = Some(size);
-                decr_style.custom_verts =
-                    left_symbol_verts(size, spacing, self.theme.colors.text1a);
+                downleft_style.pos_from_t = Some(0.0);
+                downleft_style.pos_from_b = Some(0.0);
+                downleft_style.pos_from_l = Some(0.0);
+                downleft_style.width = Some(size);
+                downleft_style.custom_verts =
+                    left_symbol_verts(size, spacing, self.theme.colors.border1);
 
                 confine_style.pos_from_t = Some(spacing);
                 confine_style.pos_from_b = Some(spacing);
@@ -603,18 +654,19 @@ impl ScrollBar {
                 container_style.pos_from_r = Some(0.0);
                 container_style.width = Some(size);
 
-                incr_style.pos_from_t = Some(0.0);
-                incr_style.pos_from_l = Some(0.0);
-                incr_style.pos_from_r = Some(0.0);
-                incr_style.height = Some(size);
-                incr_style.custom_verts = up_symbol_verts(size, spacing, self.theme.colors.text1a);
+                upright_style.pos_from_t = Some(0.0);
+                upright_style.pos_from_l = Some(0.0);
+                upright_style.pos_from_r = Some(0.0);
+                upright_style.height = Some(size);
+                upright_style.custom_verts =
+                    up_symbol_verts(size, spacing, self.theme.colors.border1);
 
-                decr_style.pos_from_b = Some(0.0);
-                decr_style.pos_from_l = Some(0.0);
-                decr_style.pos_from_r = Some(0.0);
-                decr_style.height = Some(size);
-                decr_style.custom_verts =
-                    down_symbol_verts(size, spacing, self.theme.colors.text1a);
+                downleft_style.pos_from_b = Some(0.0);
+                downleft_style.pos_from_l = Some(0.0);
+                downleft_style.pos_from_r = Some(0.0);
+                downleft_style.height = Some(size);
+                downleft_style.custom_verts =
+                    down_symbol_verts(size, spacing, self.theme.colors.border1);
 
                 confine_style.pos_from_t = Some(size + border_size);
                 confine_style.pos_from_b = Some(size + border_size);
@@ -660,8 +712,8 @@ impl ScrollBar {
 
         Bin::style_update_batch([
             (&self.container, container_style),
-            (&self.incr, incr_style),
-            (&self.decr, decr_style),
+            (&self.upright, upright_style),
+            (&self.downleft, downleft_style),
             (&self.confine, confine_style),
             (&self.bar, bar_style),
         ]);

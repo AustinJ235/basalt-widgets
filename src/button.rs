@@ -105,9 +105,15 @@ where
 
         button_hooks(
             &button.container,
-            [button.theme.colors.back3, button.theme.colors.text1a],
-            [button.theme.colors.accent1, button.theme.colors.text1b],
-            [button.theme.colors.accent2, button.theme.colors.text1b],
+            BtnHookColors {
+                text_clr: Some(button.theme.colors.text1a),
+                back_clr: Some(button.theme.colors.back3),
+                h_text_clr: Some(button.theme.colors.text1b),
+                h_back_clr: Some(button.theme.colors.accent1),
+                p_text_clr: Some(button.theme.colors.text1b),
+                p_back_clr: Some(button.theme.colors.accent2),
+                ..Default::default()
+            },
             move |_| {
                 let state = cb_button.state.lock();
 
@@ -222,102 +228,178 @@ impl Button {
     }
 }
 
-pub(crate) fn button_hooks<F>(
-    button: &Arc<Bin>,
-    colors: [Color; 2],
-    hover_colors: [Color; 2],
-    press_colors: [Color; 2],
-    mut on_press: F,
-) where
+#[derive(Clone, Copy, Default)]
+pub(crate) struct BtnHookColors {
+    pub text_clr: Option<Color>,
+    pub back_clr: Option<Color>,
+    pub vert_clr: Option<Color>,
+    pub h_text_clr: Option<Color>,
+    pub h_back_clr: Option<Color>,
+    pub h_vert_clr: Option<Color>,
+    pub p_text_clr: Option<Color>,
+    pub p_back_clr: Option<Color>,
+    pub p_vert_clr: Option<Color>,
+}
+
+pub(crate) fn button_hooks<F>(button: &Arc<Bin>, colors: BtnHookColors, mut on_press: F)
+where
     F: FnMut(&WindowState) + Send + 'static,
 {
-    let cursor_inside = Arc::new(AtomicBool::new(false));
-    let button_pressed = Arc::new(AtomicBool::new(false));
-
-    let cb_cursor_inside = cursor_inside.clone();
-    let cb_button_pressed = button_pressed.clone();
+    let inside = Arc::new(AtomicBool::new(false));
+    let pressed = Arc::new(AtomicBool::new(false));
+    let cb_inside = inside.clone();
+    let cb_pressed = pressed.clone();
 
     button.on_enter(move |target, _| {
-        cb_cursor_inside.store(true, atomic::Ordering::SeqCst);
         let button = target.into_bin().unwrap();
+        cb_inside.store(true, atomic::Ordering::SeqCst);
 
-        if !cb_button_pressed.load(atomic::Ordering::SeqCst) {
+        if !cb_pressed.load(atomic::Ordering::SeqCst)
+            && (colors.h_text_clr.is_some()
+                || colors.h_back_clr.is_some()
+                || colors.h_vert_clr.is_some())
+        {
             let mut style = button.style_copy();
-            style.back_color = Some(hover_colors[0]);
-            style.text_color = Some(hover_colors[1]);
-            style
-                .custom_verts
-                .iter_mut()
-                .for_each(|vert| vert.color = hover_colors[1]);
+
+            if let Some(h_text_clr) = colors.h_text_clr {
+                style.text_color = Some(h_text_clr);
+            }
+
+            if let Some(h_back_clr) = colors.h_back_clr {
+                style.back_color = Some(h_back_clr);
+            }
+
+            if let Some(h_vert_clr) = colors.h_vert_clr {
+                style
+                    .custom_verts
+                    .iter_mut()
+                    .for_each(|vertex| vertex.color = h_vert_clr);
+            }
+
             button.style_update(style).expect_valid();
         }
 
         Default::default()
     });
 
-    let cb_cursor_inside = cursor_inside.clone();
-    let cb_button_pressed = button_pressed.clone();
+    let cb_inside = inside.clone();
+    let cb_pressed = pressed.clone();
 
     button.on_leave(move |target, _| {
-        cb_cursor_inside.store(false, atomic::Ordering::SeqCst);
         let button = target.into_bin().unwrap();
+        cb_inside.store(false, atomic::Ordering::SeqCst);
 
-        if !cb_button_pressed.load(atomic::Ordering::SeqCst) {
+        if !cb_pressed.load(atomic::Ordering::SeqCst)
+            && (colors.h_text_clr.is_some()
+                || colors.h_back_clr.is_some()
+                || colors.h_vert_clr.is_some())
+        {
             let mut style = button.style_copy();
-            style.back_color = Some(colors[0]);
-            style.text_color = Some(colors[1]);
-            style
-                .custom_verts
-                .iter_mut()
-                .for_each(|vert| vert.color = colors[1]);
+
+            if let Some(text_clr) = colors.text_clr {
+                style.text_color = Some(text_clr);
+            }
+
+            if let Some(back_clr) = colors.back_clr {
+                style.back_color = Some(back_clr);
+            }
+
+            if let Some(vert_clr) = colors.vert_clr {
+                style
+                    .custom_verts
+                    .iter_mut()
+                    .for_each(|vertex| vertex.color = vert_clr);
+            }
+
             button.style_update(style).expect_valid();
         }
 
         Default::default()
     });
 
-    let cb_button_pressed = button_pressed.clone();
+    let cb_pressed = pressed.clone();
 
     button.on_press(MouseButton::Left, move |target, w_state, _| {
-        cb_button_pressed.store(true, atomic::Ordering::SeqCst);
         let button = target.into_bin().unwrap();
-        let mut style = button.style_copy();
-        style.back_color = Some(press_colors[0]);
-        style.text_color = Some(press_colors[1]);
-        style
-            .custom_verts
-            .iter_mut()
-            .for_each(|vert| vert.color = press_colors[1]);
-        button.style_update(style).expect_valid();
+        cb_pressed.store(true, atomic::Ordering::SeqCst);
+
+        if colors.p_text_clr.is_some() || colors.p_back_clr.is_some() || colors.p_vert_clr.is_some()
+        {
+            let mut style = button.style_copy();
+
+            if let Some(p_text_clr) = colors.p_text_clr {
+                style.text_color = Some(p_text_clr);
+            }
+
+            if let Some(p_back_clr) = colors.p_back_clr {
+                style.back_color = Some(p_back_clr);
+            }
+
+            if let Some(p_vert_clr) = colors.p_vert_clr {
+                style
+                    .custom_verts
+                    .iter_mut()
+                    .for_each(|vertex| vertex.color = p_vert_clr);
+            }
+
+            button.style_update(style).expect_valid();
+        }
+
         on_press(w_state);
         Default::default()
     });
 
-    let cb_cursor_inside = cursor_inside;
-    let cb_button_pressed = button_pressed;
+    let cb_inside = inside;
+    let cb_pressed = pressed;
 
     button.on_release(MouseButton::Left, move |target, _, _| {
-        cb_button_pressed.store(false, atomic::Ordering::SeqCst);
         let button = target.into_bin().unwrap();
-        let mut style = button.style_copy();
+        cb_pressed.store(false, atomic::Ordering::SeqCst);
 
-        if cb_cursor_inside.load(atomic::Ordering::SeqCst) {
-            style.back_color = Some(hover_colors[0]);
-            style.text_color = Some(hover_colors[1]);
-            style
-                .custom_verts
-                .iter_mut()
-                .for_each(|vert| vert.color = hover_colors[1]);
+        if cb_inside.load(atomic::Ordering::SeqCst)
+            && (colors.h_text_clr.is_some()
+                || colors.h_back_clr.is_some()
+                || colors.h_vert_clr.is_some())
+        {
+            let mut style = button.style_copy();
+
+            if let Some(h_text_clr) = colors.h_text_clr {
+                style.text_color = Some(h_text_clr);
+            }
+
+            if let Some(h_back_clr) = colors.h_back_clr {
+                style.back_color = Some(h_back_clr);
+            }
+
+            if let Some(h_vert_clr) = colors.h_vert_clr {
+                style
+                    .custom_verts
+                    .iter_mut()
+                    .for_each(|vertex| vertex.color = h_vert_clr);
+            }
+
+            button.style_update(style).expect_valid();
         } else {
-            style.back_color = Some(colors[0]);
-            style.text_color = Some(colors[1]);
-            style
-                .custom_verts
-                .iter_mut()
-                .for_each(|vert| vert.color = colors[1]);
+            let mut style = button.style_copy();
+
+            if let Some(text_clr) = colors.text_clr {
+                style.text_color = Some(text_clr);
+            }
+
+            if let Some(back_clr) = colors.back_clr {
+                style.back_color = Some(back_clr);
+            }
+
+            if let Some(vert_clr) = colors.vert_clr {
+                style
+                    .custom_verts
+                    .iter_mut()
+                    .for_each(|vertex| vertex.color = vert_clr);
+            }
+
+            button.style_update(style).expect_valid();
         }
 
-        button.style_update(style).expect_valid();
         Default::default()
     });
 }
