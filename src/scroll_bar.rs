@@ -1,8 +1,10 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::sync::atomic::{self, AtomicBool};
 use std::time::Duration;
 
+use basalt::input::MouseButton;
 use basalt::interface::{Bin, BinPosition, BinStyle, BinVert, Color};
 use basalt::interval::{IntvlHookCtrl, IntvlHookID};
 use parking_lot::ReentrantMutex;
@@ -171,6 +173,11 @@ where
                     steps: VecDeque::new(),
                     intvl_hook_id: None,
                 }),
+                drag: RefCell::new(DragState {
+                    cursor_start: 0.0,
+                    scroll_start: 0.0,
+                    scroll_per_px: 0.0,
+                }),
             }),
         });
 
@@ -234,6 +241,81 @@ where
 
                 Default::default()
             });
+
+        let bar_held = Arc::new(AtomicBool::new(false));
+
+        let cb_scroll_bar = scroll_bar.clone();
+        let cb_bar_held = bar_held.clone();
+
+        scroll_bar
+            .bar
+            .on_press(MouseButton::Left, move |_, w_state, _| {
+                let [cursor_x, cursor_y] = w_state.cursor_pos();
+
+                let cursor_start = match cb_scroll_bar.props.axis {
+                    ScrollAxis::X => cursor_x,
+                    ScrollAxis::Y => cursor_y,
+                };
+
+                let state = cb_scroll_bar.state.lock();
+                state.smooth.borrow_mut().steps.clear();
+
+                let mut drag_state = state.drag.borrow_mut();
+                drag_state.cursor_start = cursor_start;
+                drag_state.scroll_start = state.target.borrow().scroll;
+
+                cb_bar_held.store(true, atomic::Ordering::SeqCst);
+                Default::default()
+            });
+
+        let cb_bar_held = bar_held.clone();
+
+        scroll_bar
+            .bar
+            .on_release(MouseButton::Left, move |_, _, _| {
+                cb_bar_held.store(false, atomic::Ordering::SeqCst);
+                Default::default()
+            });
+
+        let cb_bar_held = bar_held;
+        let cb_scroll_bar = scroll_bar.clone();
+
+        scroll_bar
+            .container
+            .attach_input_hook(window.on_cursor(move |_, w_state, _| {
+                if cb_bar_held.load(atomic::Ordering::SeqCst) {
+                    let [cursor_x, cursor_y] = w_state.cursor_pos();
+                    let state = cb_scroll_bar.state.lock();
+
+                    let jump_to = {
+                        let drag_state = state.drag.borrow_mut();
+
+                        let delta = match cb_scroll_bar.props.axis {
+                            ScrollAxis::X => cursor_x - drag_state.cursor_start,
+                            ScrollAxis::Y => cursor_y - drag_state.cursor_start,
+                        };
+
+                        drag_state.scroll_start + (delta * drag_state.scroll_per_px)
+                    };
+
+                    cb_scroll_bar.jump_to(jump_to);
+                }
+
+                /*if let Some([delta_x, delta_y]) = l_state.delta() {
+                    if cb_bar_held.load(atomic::Ordering::SeqCst) {
+                        let delta = match cb_scroll_bar.props.axis {
+                            ScrollAxis::X => delta_x,
+                            ScrollAxis::Y => delta_y,
+                        };
+
+                        let state = cb_scroll_bar.state.lock();
+                        let px_per_px = state.drag.borrow().scroll_per_px;
+                        cb_scroll_bar.jump(delta * px_per_px);
+                    }
+                }*/
+
+                Default::default()
+            }));
 
         if scroll_bar.props.smooth || scroll_bar.props.accel {
             let scroll_bar_wk = Arc::downgrade(&scroll_bar);
@@ -315,6 +397,7 @@ pub struct ScrollBar {
 struct State {
     target: RefCell<TargetState>,
     smooth: RefCell<SmoothState>,
+    drag: RefCell<DragState>,
 }
 
 struct TargetState {
@@ -326,6 +409,12 @@ struct SmoothState {
     target: f32,
     steps: VecDeque<f32>,
     intvl_hook_id: Option<IntvlHookID>,
+}
+
+struct DragState {
+    cursor_start: f32,
+    scroll_start: f32,
+    scroll_per_px: f32,
 }
 
 impl ScrollBar {
@@ -410,6 +499,12 @@ impl ScrollBar {
         }
     }
 
+    pub fn jump(&self, amt: f32) {
+        let state = self.state.lock();
+        state.smooth.borrow_mut().steps.clear();
+        self.scroll_no_anim(amt);
+    }
+
     pub fn jump_to(&self, to: f32) {
         let state = self.state.lock();
         let mut update = self.check_target_state();
@@ -421,6 +516,11 @@ impl ScrollBar {
             if to > target_state.overflow {
                 if target_state.scroll != target_state.overflow {
                     target_state.scroll = target_state.overflow;
+                    update = true;
+                }
+            } else if to < 0.0 {
+                if target_state.scroll != 0.0 {
+                    target_state.scroll = 0.0;
                     update = true;
                 }
             } else {
@@ -531,25 +631,23 @@ impl ScrollBar {
     fn update(&self) {
         let state = self.state.lock();
         let target_state = state.target.borrow();
-        let mut bar_style = self.bar.style_copy();
+        let confine_bpu = self.confine.post_update();
 
-        let [bar_size_pct, bar_offset_pct] = if target_state.overflow <= 0.0 {
-            [100.0, 0.0]
-        } else {
-            let bar_space = (target_state.overflow / self.props.step).clamp(10.0, 100.0);
-
-            [
-                100.0 - bar_space,
-                (target_state.scroll / target_state.overflow) * bar_space,
-            ]
+        let confine_size = match self.props.axis {
+            ScrollAxis::X => confine_bpu.tri[0] - confine_bpu.tli[0],
+            ScrollAxis::Y => confine_bpu.bli[1] - confine_bpu.tli[1],
         };
 
-        // TODO: Remove This
-        /*println!(
-            "Overflow: {} Px, Scroll: {} Px, Bar Size: {:.1} %, Bar Offset: {:.1} %",
-            target_state.overflow, target_state.scroll, bar_size_pct, bar_offset_pct
-        );*/
+        let space_size =
+            (target_state.overflow / self.props.step).min(confine_size - self.theme.base_size);
 
+        let scroll_per_px = target_state.overflow / space_size;
+        state.drag.borrow_mut().scroll_per_px = scroll_per_px;
+        let bar_size_pct = ((confine_size - space_size) / confine_size) * 100.0;
+
+        let bar_offset_pct = ((target_state.scroll / scroll_per_px) / confine_size) * 100.0;
+
+        let mut bar_style = self.bar.style_copy();
         let mut target_style = self.props.target.style_copy();
         let mut target_style_update = false;
 
