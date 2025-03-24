@@ -13,9 +13,15 @@ use crate::builder::WidgetBuilder;
 use crate::button::{BtnHookColors, button_hooks};
 use crate::{Theme, WidgetContainer};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Determintes the orientation and axis of the [`ScrollBar`].
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScrollAxis {
+    /// The [`ScrollBar`] will control the x-axis and be oriented horizontally.
     X,
+    /// The [`ScrollBar`] will control the y-axis and be oriented vertically.
+    ///
+    /// **Note**: This is the default.
+    #[default]
     Y,
 }
 
@@ -52,6 +58,7 @@ impl Properties {
     }
 }
 
+/// Builder for [`ScrollBar`]
 pub struct ScrollBarBuilder<'a, C> {
     widget: WidgetBuilder<'a, C>,
     props: Properties,
@@ -73,51 +80,99 @@ where
         }
     }
 
+    /// Set the amount the target container should be scrolled initially.
+    ///
+    /// **Note**: If not set this defaults the current scroll amount defined by the target container.
     pub fn scroll(mut self, scroll: f32) -> Self {
         self.initial_state.scroll = Some(scroll);
         self
     }
 
+    /// Set the axis.
+    ///
+    /// See [`ScrollAxis`] docs for more information.
+    ///
+    /// **Note**: If not set this defaults to [`ScrollAxis::Y`].
     pub fn axis(mut self, axis: ScrollAxis) -> Self {
         self.props.axis = axis;
         self
     }
 
+    /// Set if smooth scroll is enabled.
+    ///
+    /// **Note**: If not set this defaults to `true`.
     pub fn smooth(mut self, smooth: bool) -> Self {
         self.props.smooth = smooth;
         self
     }
 
+    /// Set the step size per input event.
+    ///
+    /// **Note**: If not set this defaults to `50.0`.
     pub fn step(mut self, step: f32) -> Self {
         self.props.step = step;
         self
     }
 
+    /// Set if scroll acceleration is enabled.
+    ///
+    /// Acceleration behavior is defined by: step size, acceleration power, max acceleration
+    /// multiplier and animation duration.
+    ///
+    /// Acceleration is applied when there is pending scroll events in the animation queue. The
+    /// pending scroll amount is divided by step size and raised to the power of acceleration power.
+    /// This value is then used as a multiplier on the new step size. The multiplier is capped by the
+    /// max acceleration multiplier.
+    ///
+    /// **Notes**:
+    /// - If not set this defaults to `true`.
+    /// - Smooth scroll will be enabled if acceleration is enabled.
     pub fn accel(mut self, accel: bool) -> Self {
         self.props.accel = accel;
         self
     }
 
+    /// Set the acceleration power.
+    ///
+    /// **Notes**:
+    /// - If not set this defaults to `1.2`.
+    /// - Has no effect if acceleration is not enabled.
     pub fn accel_pow(mut self, accel_pow: f32) -> Self {
         self.props.accel_pow = accel_pow;
         self
     }
 
+    /// Set the max acceleration multiplier.
+    ///
+    /// **Notes**:
+    /// - If not set this defaults to `4.0`.
+    /// - Has no effect if acceleration is not enabled.
     pub fn max_accel_mult(mut self, max_accel_mult: f32) -> Self {
         self.props.max_accel_mult = max_accel_mult;
         self
     }
 
+    /// Set the update frequency of the ui.
+    ///
+    /// **Notes**:
+    /// - If not set this defaults to 120 hz.
+    /// - Has no effect if smooth scroll or acceleration is not enabled.
     pub fn update_hz(mut self, update_hz: u32) -> Self {
         self.props.update_intvl = Duration::from_secs(1) / update_hz;
         self
     }
 
+    /// Set the duration of animations.
+    ///
+    /// **Notes**:
+    /// - If not set this defaults to 100 ms.
+    /// - Has no effect if smooth scroll or acceleration is not enabled.
     pub fn animation_duration(mut self, animation_duration: Duration) -> Self {
         self.props.animation_duration = animation_duration;
         self
     }
 
+    /// Finish building the [`ScrollBar`].
     pub fn build(self) -> Arc<ScrollBar> {
         let window = self
             .widget
@@ -391,6 +446,7 @@ where
     }
 }
 
+/// Scroll bar widget
 pub struct ScrollBar {
     theme: Theme,
     props: Properties,
@@ -426,6 +482,11 @@ struct DragState {
 }
 
 impl ScrollBar {
+    /// Scroll an amount of pixels.
+    ///
+    /// **Notes**:
+    /// - This may be effected by acceleration.
+    /// - If smooth scroll or acceleration are both disabled this uses [`ScrollBar::jump`].
     pub fn scroll(&self, amt: f32) {
         let state = self.state.lock();
 
@@ -472,6 +533,9 @@ impl ScrollBar {
             .start(smooth_state.intvl_hook_id.unwrap());
     }
 
+    /// Scroll to a certain amount of pixels.
+    ///
+    /// **Note**: If smooth scroll or acceleration are both disabled this uses [`ScrollBar::jump_to`].
     pub fn scroll_to(&self, to: f32) {
         let state = self.state.lock();
 
@@ -496,10 +560,20 @@ impl ScrollBar {
             .start(smooth_state.intvl_hook_id.unwrap());
     }
 
+    /// Scroll to the minimum.
+    ///
+    /// If [`ScrollAxis`] is `Y` this it the top. If `X` then the left.
+    ///
+    /// **Note**: If smooth scroll or acceleration are both disabled this uses [`ScrollBar::jump_to_min`].
     pub fn scroll_to_min(&self) {
         self.scroll_to(0.0);
     }
 
+    /// Scroll to the maximum.
+    ///
+    /// If [`ScrollAxis`] is `Y` this it the bottom. If `X` then the right.
+    ///
+    /// **Note**: If smooth scroll or acceleration are both disabled this uses [`ScrollBar::jump_to_max`].
     pub fn scroll_to_max(&self) {
         let state = self.state.lock();
         let max = state.target.borrow().overflow;
@@ -541,12 +615,18 @@ impl ScrollBar {
         }
     }
 
+    /// Jump an amount of pixels.
+    ///
+    /// **Note**: This is the same as [`ScrollBar::scroll`] but does not animate or accelerate.
     pub fn jump(&self, amt: f32) {
         let state = self.state.lock();
         state.smooth.borrow_mut().steps.clear();
         self.scroll_no_anim(amt);
     }
 
+    /// Jump to a certain amount of pixels.
+    ///
+    /// **Note**: This is the same as [`ScrollBar::scroll_to`] but does not animate.
     pub fn jump_to(&self, to: f32) {
         let state = self.state.lock();
         let mut update = self.check_target_state();
@@ -578,6 +658,11 @@ impl ScrollBar {
         }
     }
 
+    /// Jump to the minimum.
+    ///
+    /// If [`ScrollAxis`] is `Y` this it the top. If `X` then the left.
+    ///
+    /// **Note**: This is the same as [`ScrollBar::scroll_to_min`] but does not animate.
     pub fn jump_to_min(&self) {
         let state = self.state.lock();
         let mut update = self.check_target_state();
@@ -597,6 +682,11 @@ impl ScrollBar {
         }
     }
 
+    /// Jump to the minimum.
+    ///
+    /// If [`ScrollAxis`] is `Y` this it the bottom. If `X` then the right.
+    ///
+    /// **Note**: This is the same as [`ScrollBar::scroll_to_max`] but does not animate.
     pub fn jump_to_max(&self) {
         let state = self.state.lock();
         let mut update = self.check_target_state();
@@ -616,6 +706,9 @@ impl ScrollBar {
         }
     }
 
+    /// Recheck the state and update if needed.
+    ///
+    /// **Note**: This may need to be called in certain cases.
     pub fn refresh(&self) {
         let _state = self.state.lock();
 
@@ -624,11 +717,33 @@ impl ScrollBar {
         }
     }
 
+    /// The amount of overflow the target has.
     pub fn target_overflow(&self) -> f32 {
         match self.props.axis {
             ScrollAxis::X => self.props.target.calc_hori_overflow(),
             ScrollAxis::Y => self.props.target.calc_vert_overflow(),
         }
+    }
+
+    /// The current amount the target is scrolled.
+    pub fn current_scroll(&self) -> f32 {
+        self.state.lock().target.borrow().scroll
+    }
+
+    /// The amount the target will be scrolled after animations.
+    ///
+    /// This will be the same value as [`ScrollBar::current_scroll`] when:
+    /// - Smooth scroll and acceleration are disabled.
+    /// - There is no animiation currently happening.
+    pub fn target_scroll(&self) -> f32 {
+        let state = self.state.lock();
+        let smooth_state = state.smooth.borrow();
+
+        if !smooth_state.steps.is_empty() {
+            return smooth_state.target;
+        }
+
+        state.target.borrow().scroll
     }
 
     fn check_target_state(&self) -> bool {
