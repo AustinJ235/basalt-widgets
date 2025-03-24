@@ -243,7 +243,6 @@ where
             });
 
         let bar_held = Arc::new(AtomicBool::new(false));
-
         let cb_scroll_bar = scroll_bar.clone();
         let cb_bar_held = bar_held.clone();
 
@@ -301,21 +300,32 @@ where
                     cb_scroll_bar.jump_to(jump_to);
                 }
 
-                /*if let Some([delta_x, delta_y]) = l_state.delta() {
-                    if cb_bar_held.load(atomic::Ordering::SeqCst) {
-                        let delta = match cb_scroll_bar.props.axis {
-                            ScrollAxis::X => delta_x,
-                            ScrollAxis::Y => delta_y,
-                        };
-
-                        let state = cb_scroll_bar.state.lock();
-                        let px_per_px = state.drag.borrow().scroll_per_px;
-                        cb_scroll_bar.jump(delta * px_per_px);
-                    }
-                }*/
-
                 Default::default()
             }));
+
+        let cb_scroll_bar = scroll_bar.clone();
+
+        scroll_bar
+            .confine
+            .on_press(MouseButton::Left, move |_, w_state, _| {
+                let [cursor_x, cursor_y] = w_state.cursor_pos();
+                let bar_bpu = cb_scroll_bar.bar.post_update();
+                let state = cb_scroll_bar.state.lock();
+
+                let delta = match cb_scroll_bar.props.axis {
+                    ScrollAxis::X => {
+                        cursor_x - (((bar_bpu.tri[0] - bar_bpu.tli[0]) / 2.0) + bar_bpu.tli[0])
+                    },
+                    ScrollAxis::Y => {
+                        cursor_y - (((bar_bpu.bli[1] - bar_bpu.tli[1]) / 2.0) + bar_bpu.tli[1])
+                    },
+                };
+
+                let jump_to =
+                    state.target.borrow().scroll + (delta * state.drag.borrow().scroll_per_px);
+                cb_scroll_bar.jump_to(jump_to);
+                Default::default()
+            });
 
         if scroll_bar.props.smooth || scroll_bar.props.accel {
             let scroll_bar_wk = Arc::downgrade(&scroll_bar);
