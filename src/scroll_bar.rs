@@ -321,9 +321,10 @@ where
                     },
                 };
 
-                let jump_to =
+                let scroll_to =
                     state.target.borrow().scroll + (delta * state.drag.borrow().scroll_per_px);
-                cb_scroll_bar.jump_to(jump_to);
+
+                cb_scroll_bar.scroll_to(scroll_to);
                 Default::default()
             });
 
@@ -384,9 +385,6 @@ where
                 cb_scroll_bar.scroll(cb_scroll_bar.props.step);
             },
         );
-
-        // TODO: Bar drag hooks
-        // TODO: Track click hooks
 
         scroll_bar.style_update();
         scroll_bar
@@ -474,6 +472,40 @@ impl ScrollBar {
             .start(smooth_state.intvl_hook_id.unwrap());
     }
 
+    pub fn scroll_to(&self, to: f32) {
+        let state = self.state.lock();
+
+        if !self.props.accel && !self.props.smooth {
+            self.jump_to(to);
+            return;
+        }
+
+        let target_state = state.target.borrow();
+        let mut smooth_state = state.smooth.borrow_mut();
+        smooth_state.steps.clear();
+
+        if target_state.scroll == to {
+            return;
+        }
+
+        smooth_state.steps = VecDeque::from_iter(self.animation_steps(target_state.scroll, to));
+
+        self.container
+            .basalt_ref()
+            .interval_ref()
+            .start(smooth_state.intvl_hook_id.unwrap());
+    }
+
+    pub fn scroll_to_min(&self) {
+        self.scroll_to(0.0);
+    }
+
+    pub fn scroll_to_max(&self) {
+        let state = self.state.lock();
+        let max = state.target.borrow().overflow;
+        self.scroll_to(max);
+    }
+
     fn scroll_no_anim(&self, amt: f32) {
         let state = self.state.lock();
         let mut update = self.check_target_state();
@@ -546,7 +578,7 @@ impl ScrollBar {
         }
     }
 
-    pub fn jump_to_top(&self) {
+    pub fn jump_to_min(&self) {
         let state = self.state.lock();
         let mut update = self.check_target_state();
 
@@ -565,7 +597,7 @@ impl ScrollBar {
         }
     }
 
-    pub fn jump_to_bottom(&self) {
+    pub fn jump_to_max(&self) {
         let state = self.state.lock();
         let mut update = self.check_target_state();
 
@@ -656,7 +688,6 @@ impl ScrollBar {
         let bar_size_pct = ((confine_size - space_size) / confine_size) * 100.0;
 
         let bar_offset_pct = ((target_state.scroll / scroll_per_px) / confine_size) * 100.0;
-
         let mut bar_style = self.bar.style_copy();
         let mut target_style = self.props.target.style_copy();
         let mut target_style_update = false;
