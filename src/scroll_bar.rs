@@ -1,12 +1,11 @@
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::f32::consts::PI;
 use std::sync::Arc;
 use std::sync::atomic::{self, AtomicBool};
 use std::time::Duration;
 
 use basalt::input::MouseButton;
 use basalt::interface::{Bin, BinPosition, BinStyle, BinVert, Color};
-use basalt::interval::{IntvlHookCtrl, IntvlHookID};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
@@ -33,7 +32,6 @@ struct Properties {
     accel: bool,
     accel_pow: f32,
     max_accel_mult: f32,
-    update_intvl: Duration,
     animation_duration: Duration,
 }
 
@@ -52,7 +50,6 @@ impl Properties {
             accel: true,
             accel_pow: 1.2,
             max_accel_mult: 4.0,
-            update_intvl: Duration::from_secs(1) / 120,
             animation_duration: Duration::from_millis(100),
         }
     }
@@ -152,16 +149,6 @@ where
         self
     }
 
-    /// Set the update frequency of the ui.
-    ///
-    /// **Notes**:
-    /// - If not set this defaults to 120 hz.
-    /// - Has no effect if smooth scroll or acceleration is not enabled.
-    pub fn update_hz(mut self, update_hz: u32) -> Self {
-        self.props.update_intvl = Duration::from_secs(1) / update_hz;
-        self
-    }
-
     /// Set the duration of animations.
     ///
     /// **Notes**:
@@ -224,9 +211,10 @@ where
                     scroll,
                 }),
                 smooth: RefCell::new(SmoothState {
-                    target: scroll,
-                    steps: VecDeque::new(),
-                    intvl_hook_id: None,
+                    run: false,
+                    start: 0.0,
+                    target: 0.0,
+                    time: 0.0,
                 }),
                 drag: RefCell::new(DragState {
                     cursor_start: 0.0,
@@ -312,7 +300,7 @@ where
                 };
 
                 let state = cb_scroll_bar.state.lock();
-                state.smooth.borrow_mut().steps.clear();
+                state.smooth.borrow_mut().run = false;
 
                 let mut drag_state = state.drag.borrow_mut();
                 drag_state.cursor_start = cursor_start;
@@ -383,34 +371,6 @@ where
                 Default::default()
             });
 
-        if scroll_bar.props.smooth || scroll_bar.props.accel {
-            let scroll_bar_wk = Arc::downgrade(&scroll_bar);
-
-            let intvl_hook_id = window.basalt_ref().interval_ref().do_every(
-                scroll_bar.props.update_intvl,
-                None,
-                move |_| {
-                    let scroll_bar = match scroll_bar_wk.upgrade() {
-                        Some(some) => some,
-                        None => return IntvlHookCtrl::Remove,
-                    };
-
-                    let state = scroll_bar.state.lock();
-                    let mut smooth_state = state.smooth.borrow_mut();
-
-                    if smooth_state.steps.is_empty() {
-                        return IntvlHookCtrl::Pause;
-                    }
-
-                    scroll_bar.scroll_no_anim(smooth_state.steps.pop_front().unwrap());
-                    IntvlHookCtrl::Continue
-                },
-            );
-
-            scroll_bar.container.attach_intvl_hook(intvl_hook_id);
-            scroll_bar.state.lock().smooth.borrow_mut().intvl_hook_id = Some(intvl_hook_id);
-        }
-
         let cb_scroll_bar = scroll_bar.clone();
 
         button_hooks(
@@ -470,9 +430,10 @@ struct TargetState {
 }
 
 struct SmoothState {
+    run: bool,
+    start: f32,
     target: f32,
-    steps: VecDeque<f32>,
-    intvl_hook_id: Option<IntvlHookID>,
+    time: f32,
 }
 
 struct DragState {
@@ -487,7 +448,7 @@ impl ScrollBar {
     /// **Notes**:
     /// - This may be effected by acceleration.
     /// - If smooth scroll or acceleration are both disabled this uses [`ScrollBar::jump`].
-    pub fn scroll(&self, amt: f32) {
+    pub fn scroll(self: &Arc<Self>, amt: f32) {
         let state = self.state.lock();
 
         if !self.props.accel && !self.props.smooth {
@@ -498,7 +459,7 @@ impl ScrollBar {
         let target_state = state.target.borrow();
         let mut smooth_state = state.smooth.borrow_mut();
 
-        smooth_state.target = if smooth_state.steps.is_empty() {
+        smooth_state.target = if !smooth_state.run {
             target_state.scroll + amt
         } else {
             let direction_changes =
@@ -524,19 +485,23 @@ impl ScrollBar {
             }
         };
 
-        smooth_state.steps =
-            VecDeque::from_iter(self.animation_steps(target_state.scroll, smooth_state.target));
+        if smooth_state.target == target_state.scroll {
+            return;
+        }
 
-        self.container
-            .basalt_ref()
-            .interval_ref()
-            .start(smooth_state.intvl_hook_id.unwrap());
+        if !smooth_state.run {
+            smooth_state.run = true;
+            self.run_smooth_scroll();
+        }
+
+        smooth_state.start = target_state.scroll;
+        smooth_state.time = 0.0;
     }
 
     /// Scroll to a certain amount of pixels.
     ///
     /// **Note**: If smooth scroll or acceleration are both disabled this uses [`ScrollBar::jump_to`].
-    pub fn scroll_to(&self, to: f32) {
+    pub fn scroll_to(self: &Arc<Self>, to: f32) {
         let state = self.state.lock();
 
         if !self.props.accel && !self.props.smooth {
@@ -546,18 +511,20 @@ impl ScrollBar {
 
         let target_state = state.target.borrow();
         let mut smooth_state = state.smooth.borrow_mut();
-        smooth_state.steps.clear();
 
         if target_state.scroll == to {
+            smooth_state.run = false;
             return;
         }
 
-        smooth_state.steps = VecDeque::from_iter(self.animation_steps(target_state.scroll, to));
+        if !smooth_state.run {
+            smooth_state.run = true;
+            self.run_smooth_scroll();
+        }
 
-        self.container
-            .basalt_ref()
-            .interval_ref()
-            .start(smooth_state.intvl_hook_id.unwrap());
+        smooth_state.start = target_state.scroll;
+        smooth_state.target = to;
+        smooth_state.time = 0.0;
     }
 
     /// Scroll to the minimum.
@@ -565,7 +532,7 @@ impl ScrollBar {
     /// If [`ScrollAxis`] is `Y` this it the top. If `X` then the left.
     ///
     /// **Note**: If smooth scroll or acceleration are both disabled this uses [`ScrollBar::jump_to_min`].
-    pub fn scroll_to_min(&self) {
+    pub fn scroll_to_min(self: &Arc<Self>) {
         self.scroll_to(0.0);
     }
 
@@ -574,7 +541,7 @@ impl ScrollBar {
     /// If [`ScrollAxis`] is `Y` this it the bottom. If `X` then the right.
     ///
     /// **Note**: If smooth scroll or acceleration are both disabled this uses [`ScrollBar::jump_to_max`].
-    pub fn scroll_to_max(&self) {
+    pub fn scroll_to_max(self: &Arc<Self>) {
         let state = self.state.lock();
         let max = state.target.borrow().overflow;
         self.scroll_to(max);
@@ -620,7 +587,7 @@ impl ScrollBar {
     /// **Note**: This is the same as [`ScrollBar::scroll`] but does not animate or accelerate.
     pub fn jump(&self, amt: f32) {
         let state = self.state.lock();
-        state.smooth.borrow_mut().steps.clear();
+        state.smooth.borrow_mut().run = false;
         self.scroll_no_anim(amt);
     }
 
@@ -628,12 +595,19 @@ impl ScrollBar {
     ///
     /// **Note**: This is the same as [`ScrollBar::scroll_to`] but does not animate.
     pub fn jump_to(&self, to: f32) {
+        self.jump_to_inner(to, true);
+    }
+
+    fn jump_to_inner(&self, to: f32, cancel_smooth: bool) {
         let state = self.state.lock();
         let mut update = self.check_target_state();
 
         {
             let mut target_state = state.target.borrow_mut();
-            state.smooth.borrow_mut().steps.clear();
+
+            if cancel_smooth {
+                state.smooth.borrow_mut().run = false;
+            }
 
             if to > target_state.overflow {
                 if target_state.scroll != target_state.overflow {
@@ -669,7 +643,7 @@ impl ScrollBar {
 
         {
             let mut target_state = state.target.borrow_mut();
-            state.smooth.borrow_mut().steps.clear();
+            state.smooth.borrow_mut().run = false;
 
             if target_state.scroll != 0.0 {
                 target_state.scroll = 0.0;
@@ -693,7 +667,7 @@ impl ScrollBar {
 
         {
             let mut target_state = state.target.borrow_mut();
-            state.smooth.borrow_mut().steps.clear();
+            state.smooth.borrow_mut().run = false;
 
             if target_state.scroll != target_state.overflow {
                 target_state.scroll = target_state.overflow;
@@ -739,7 +713,7 @@ impl ScrollBar {
         let state = self.state.lock();
         let smooth_state = state.smooth.borrow();
 
-        if !smooth_state.steps.is_empty() {
+        if !smooth_state.run {
             return smooth_state.target;
         }
 
@@ -765,24 +739,31 @@ impl ScrollBar {
         update
     }
 
-    fn animation_steps(&self, current: f32, target: f32) -> Vec<f32> {
-        const ANIM_POW: f32 = 0.2;
-        let delta = target - current;
+    fn run_smooth_scroll(self: &Arc<Self>) {
+        if let Some(window) = self.container.window() {
+            let scroll_bar = self.clone();
+            let animation_duration = self.props.animation_duration.as_micros() as f32 / 1000.0;
 
-        let step_count = (self.props.animation_duration.as_micros() as f32
-            / self.props.update_intvl.as_micros() as f32)
-            .round() as usize;
+            window.renderer_on_frame(move |elapsed_op| {
+                let state = scroll_bar.state.lock();
+                let mut smooth_state = state.smooth.borrow_mut();
 
-        let step_base = delta
-            / (1..=step_count)
-                .into_iter()
-                .map(|i| (i as f32 / step_count as f32).powf(ANIM_POW))
-                .sum::<f32>();
+                if !smooth_state.run {
+                    return false;
+                }
 
-        (1..=step_count)
-            .into_iter()
-            .map(|i| (i as f32 / step_count as f32).powf(ANIM_POW) * step_base)
-            .collect()
+                if let Some(elapsed) = elapsed_op {
+                    smooth_state.time += elapsed.as_micros() as f32 / 1000.0;
+                }
+
+                let delta = smooth_state.target - smooth_state.start;
+                let linear_t = (smooth_state.time / animation_duration).clamp(0.0, 1.0);
+                let smooth_t = (((linear_t + 1.5) * PI).sin() + 1.0) / 2.0;
+                scroll_bar.jump_to_inner(smooth_state.start + (delta * smooth_t), false);
+                smooth_state.run = smooth_state.time < animation_duration;
+                smooth_state.run
+            });
+        }
     }
 
     fn update(&self) {
