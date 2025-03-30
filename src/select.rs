@@ -85,6 +85,11 @@ where
             .create_widget()
             .with_theme(self.widget.theme.clone())
             .scroll_bar(option_list.clone())
+            .step(
+                self.widget.theme.spacing
+                    + self.widget.theme.base_size
+                    + self.widget.theme.border.unwrap_or(0.0),
+            )
             .build();
 
         let options_state = RefCell::new(BTreeMap::from_iter(self.options.into_iter().map(

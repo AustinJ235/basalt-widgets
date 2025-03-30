@@ -244,10 +244,14 @@ where
 
         let cb_scroll_bar = scroll_bar.clone();
 
-        scroll_bar
-            .props
-            .target
-            .on_scroll(move |_, _, scroll_y, scroll_x| {
+        window
+            .basalt_ref()
+            .input_ref()
+            .hook()
+            .bin(&scroll_bar.props.target)
+            .on_scroll()
+            .upper_blocks(true)
+            .call(move |_, _, scroll_y, scroll_x| {
                 match cb_scroll_bar.props.axis {
                     ScrollAxis::X => {
                         if scroll_x != 0.0 {
@@ -262,13 +266,20 @@ where
                 }
 
                 Default::default()
-            });
+            })
+            .finish()
+            .unwrap();
 
         let cb_scroll_bar = scroll_bar.clone();
 
-        scroll_bar
-            .container
-            .on_scroll(move |_, _, scroll_y, scroll_x| {
+        window
+            .basalt_ref()
+            .input_ref()
+            .hook()
+            .bin(&scroll_bar.container)
+            .on_scroll()
+            .upper_blocks(true)
+            .call(move |_, _, scroll_y, scroll_x| {
                 match cb_scroll_bar.props.axis {
                     ScrollAxis::X => {
                         if scroll_x != 0.0 {
@@ -283,7 +294,9 @@ where
                 }
 
                 Default::default()
-            });
+            })
+            .finish()
+            .unwrap();
 
         let bar_held = Arc::new(AtomicBool::new(false));
         let cb_scroll_bar = scroll_bar.clone();
