@@ -6,6 +6,7 @@ pub use crate::progress_bar::ProgressBarBuilder;
 pub use crate::radio_button::RadioButtonBuilder;
 pub use crate::scaler::ScalerBuilder;
 pub use crate::scroll_bar::ScrollBarBuilder;
+pub use crate::select::SelectBuilder;
 pub use crate::spin_button::SpinButtonBuilder;
 pub use crate::switch_button::SwitchButtonBuilder;
 pub use crate::toggle_button::ToggleButtonBuilder;
@@ -93,5 +94,13 @@ where
         T: WidgetContainer,
     {
         ScrollBarBuilder::with_builder(self, target)
+    }
+
+    /// Transition into building a [`Select`](crate::Select)
+    pub fn select<I>(self) -> SelectBuilder<'a, C, I>
+    where
+        I: Ord + Copy + Send + 'static,
+    {
+        SelectBuilder::with_builder(self)
     }
 }

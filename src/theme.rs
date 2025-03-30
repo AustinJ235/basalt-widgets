@@ -3,6 +3,7 @@ use basalt::interface::{Color, FontWeight};
 /// The theme used for widgets.
 ///
 /// **Note**: The `Default` impl is Basalt's light theme.
+#[derive(Debug, Clone)]
 pub struct Theme {
     pub spacing: f32,
     pub text_height: f32,
@@ -44,6 +45,7 @@ impl Default for Theme {
 /// [`Color`](basalt::interface::Color)'s used by [`Theme`]
 ///
 /// **Note**: The `Default` impl defaults to Basalt's light color pallete.
+#[derive(Debug, Clone)]
 pub struct ThemeColors {
     pub back1: Color,
     pub back2: Color,

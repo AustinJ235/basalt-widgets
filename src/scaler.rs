@@ -509,6 +509,8 @@ impl Scaler {
     }
 
     fn style_update(self: &Arc<Self>) {
+        let border_size = self.theme.border.unwrap_or(0.0);
+
         let [
             widget_width,
             widget_height,
@@ -529,12 +531,13 @@ impl Scaler {
 
                 let track_space = widget_height / 4.0;
                 let track_size = widget_height - (track_space * 2.0);
+
                 [
                     widget_width,
                     widget_height,
                     track_space,
                     track_size,
-                    widget_height,
+                    widget_height - (border_size * 2.0),
                 ]
             },
             ScalerOrientation::Vertical => {
@@ -550,12 +553,13 @@ impl Scaler {
 
                 let track_space = widget_width / 4.0;
                 let track_size = widget_width - (track_space * 2.0);
+
                 [
                     widget_width,
                     widget_height,
                     track_space,
                     track_size,
-                    widget_width,
+                    widget_width - (border_size * 2.0),
                 ]
             },
         };
@@ -587,8 +591,6 @@ impl Scaler {
 
         let mut confine_style = BinStyle {
             position: Some(BinPosition::Parent),
-            pos_from_b: Some(0.0),
-            pos_from_l: Some(0.0),
             ..Default::default()
         };
 
@@ -606,30 +608,34 @@ impl Scaler {
             ScalerOrientation::Horizontal => {
                 track_style.pos_from_t = Some(track_space);
                 track_style.pos_from_b = Some(track_space);
-                track_style.pos_from_l = Some(0.0);
-                track_style.pos_from_r = Some(0.0);
+                track_style.pos_from_l = Some(border_size);
+                track_style.pos_from_r = Some(border_size);
 
                 confine_style.pos_from_t = Some(0.0);
-                confine_style.pos_from_r = Some(widget_height);
+                confine_style.pos_from_b = Some(0.0);
+                confine_style.pos_from_l = Some(border_size);
+                confine_style.pos_from_r = Some(widget_height - border_size);
                 confine_style.overflow_x = Some(true);
 
-                knob_style.pos_from_t = Some(0.0);
-                knob_style.pos_from_b = Some(0.0);
+                knob_style.pos_from_t = Some(border_size);
+                knob_style.pos_from_b = Some(border_size);
                 knob_style.pos_from_l_pct = Some(pct);
                 knob_style.width = Some(knob_size);
             },
             ScalerOrientation::Vertical => {
-                track_style.pos_from_t = Some(0.0);
-                track_style.pos_from_b = Some(0.0);
+                track_style.pos_from_t = Some(border_size);
+                track_style.pos_from_b = Some(border_size);
                 track_style.pos_from_l = Some(track_space);
                 track_style.pos_from_r = Some(track_space);
 
-                confine_style.pos_from_t = Some(widget_width);
+                confine_style.pos_from_t = Some(widget_width - border_size);
+                confine_style.pos_from_b = Some(border_size);
+                confine_style.pos_from_l = Some(0.0);
                 confine_style.pos_from_r = Some(0.0);
                 confine_style.overflow_y = Some(true);
 
-                knob_style.pos_from_l = Some(0.0);
-                knob_style.pos_from_r = Some(0.0);
+                knob_style.pos_from_l = Some(border_size);
+                knob_style.pos_from_r = Some(border_size);
                 knob_style.pos_from_b_pct = Some(pct);
                 knob_style.height = Some(knob_size);
             },

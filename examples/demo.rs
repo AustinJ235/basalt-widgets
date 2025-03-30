@@ -144,6 +144,26 @@ fn main() {
         let _check_b = background.create_widget().check_box(()).build();
         let _check_c = background.create_widget().check_box(()).build();
 
+        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+        enum Options {
+            A,
+            B,
+            C,
+            D,
+            E,
+        }
+
+        let _select = background
+            .create_widget()
+            .select::<Options>()
+            .add_option(Options::A, "Option A")
+            .add_option(Options::B, "Option B")
+            .add_option(Options::C, "Option C")
+            .add_option(Options::D, "Option D")
+            .add_option(Options::E, "Option E")
+            .select(Options::A)
+            .build();
+
         // -- ScrollBar Testing -- //
 
         let scroll_area_container = window.new_bin();

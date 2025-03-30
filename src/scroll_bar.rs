@@ -5,7 +5,7 @@ use std::sync::atomic::{self, AtomicBool};
 use std::time::Duration;
 
 use basalt::input::MouseButton;
-use basalt::interface::{Bin, BinPosition, BinStyle, BinVert, Color};
+use basalt::interface::{Bin, BinID, BinPosition, BinStyle, BinVert, Color};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
@@ -720,6 +720,19 @@ impl ScrollBar {
         state.target.borrow().scroll
     }
 
+    // TODO: Public?
+    pub(crate) fn size(theme: &Theme) -> f32 {
+        (theme.base_size / 1.5) + theme.border.unwrap_or(0.0)
+    }
+
+    pub(crate) fn has_bin_id(&self, bin_id: BinID) -> bool {
+        bin_id == self.container.id()
+            || bin_id == self.upright.id()
+            || bin_id == self.downleft.id()
+            || bin_id == self.confine.id()
+            || bin_id == self.bar.id()
+    }
+
     fn check_target_state(&self) -> bool {
         let state = self.state.lock();
         let target_overflow = self.target_overflow();
@@ -877,6 +890,7 @@ impl ScrollBar {
                 confine_style.pos_from_b = Some(spacing);
                 confine_style.pos_from_l = Some(size + border_size);
                 confine_style.pos_from_r = Some(size + border_size);
+                confine_style.overflow_x = Some(true);
 
                 bar_style.pos_from_t = Some(0.0);
                 bar_style.pos_from_b = Some(0.0);
@@ -907,6 +921,7 @@ impl ScrollBar {
                 confine_style.pos_from_b = Some(size + border_size);
                 confine_style.pos_from_l = Some(spacing);
                 confine_style.pos_from_r = Some(spacing);
+                confine_style.overflow_y = Some(true);
 
                 bar_style.pos_from_t_pct = Some(0.0);
                 bar_style.pos_from_l = Some(0.0);
@@ -960,7 +975,7 @@ fn up_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert>
     symbol_verts(target_size, spacing, color, &UNIT_POINTS)
 }
 
-fn down_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
+pub(crate) fn down_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
     const UNIT_POINTS: [[f32; 2]; 3] = [[0.0, 0.25], [1.0, 0.25], [0.5, 0.75]];
     symbol_verts(target_size, spacing, color, &UNIT_POINTS)
 }
