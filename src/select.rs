@@ -18,9 +18,16 @@ pub struct SelectBuilder<'a, C, I> {
     on_select: Vec<Box<dyn FnMut(&Arc<Select<I>>, I) + Send + 'static>>,
 }
 
-#[derive(Default)]
 struct Properties {
-    //
+    drop_down_items: usize,
+}
+
+impl Default for Properties {
+    fn default() -> Self {
+        Self {
+            drop_down_items: 3,
+        }
+    }
 }
 
 impl<'a, C, I> SelectBuilder<'a, C, I>
@@ -48,6 +55,11 @@ where
 
     pub fn select(mut self, option_id: I) -> Self {
         self.select = Some(option_id);
+        self
+    }
+
+    pub fn drop_down_items(mut self, count: usize) -> Self {
+        self.props.drop_down_items = count;
         self
     }
 
@@ -79,6 +91,7 @@ where
             .add_child(container.clone());
 
         container.add_child(arrow_down.clone());
+        container.add_child(popup.clone());
         popup.add_child(option_list.clone());
 
         let scroll_bar = popup
@@ -186,7 +199,6 @@ where
 
 pub struct Select<I> {
     theme: Theme,
-    #[allow(dead_code)]
     props: Properties,
     container: Arc<Bin>,
     popup: Arc<Bin>,
@@ -291,12 +303,8 @@ where
 
     fn display_popup(&self) {
         let mut style_update_batch = Vec::new();
-        let container_bpu = self.container.post_update();
-
         let mut popup_style = self.popup.style_copy();
         popup_style.hidden = None;
-        popup_style.pos_from_t = Some(container_bpu.blo[1]);
-        popup_style.pos_from_l = Some(container_bpu.bli[0]);
         style_update_batch.push((&self.popup, popup_style));
 
         if self.theme.roundness.is_some() {
@@ -306,9 +314,35 @@ where
             style_update_batch.push((&self.container, container_style));
         }
 
-        // TODO: Ideally jump to where the current selection is in the middle.
-        self.scroll_bar.jump_to_min();
+        let index = {
+            let state = self.state.lock();
+            let select = state.select.borrow();
+            let options = state.options.borrow();
+
+            match *select {
+                Some(sel_id) => {
+                    match options.keys().enumerate().find(|(_, id)| **id == sel_id) {
+                        Some(some) => some.0,
+                        None => 0,
+                    }
+                },
+                None => 0,
+            }
+        };
+
+        self.popup_jump_to_index(index);
         Bin::style_update_batch(style_update_batch);
+    }
+
+    fn popup_jump_to_index(&self, index: usize) {
+        let jump_index = index
+            .checked_sub(self.props.drop_down_items / 3)
+            .unwrap_or(0);
+
+        let jump_to = jump_index as f32
+            * (self.theme.base_size + self.theme.spacing + self.theme.border.unwrap_or(0.0));
+
+        self.scroll_bar.jump_to(jump_to);
     }
 
     fn rebuild_list(&self) {
@@ -374,6 +408,7 @@ where
     fn style_update(&self) {
         let widget_height = self.theme.spacing + self.theme.base_size;
         let widget_width = widget_height * 5.0;
+        let border_size = self.theme.border.unwrap_or(0.0);
 
         let mut container_style = BinStyle {
             position: Some(BinPosition::Floating),
@@ -393,6 +428,8 @@ where
             text_wrap: Some(TextWrap::None),
             font_family: Some(self.theme.font_family.clone()),
             font_weight: Some(self.theme.font_weight),
+            overflow_y: Some(true),
+            overflow_x: Some(true),
             ..Default::default()
         };
 
@@ -412,11 +449,16 @@ where
 
         let mut popup_style = BinStyle {
             hidden: Some(true),
-            position: Some(BinPosition::Window),
-            pos_from_t: Some(300.0),
-            pos_from_l: Some(10.0),
-            width: Some(widget_width),
-            height: Some((widget_height * 3.0) + (self.theme.border.unwrap_or(0.0) * 2.0)),
+            position: Some(BinPosition::Parent),
+            pos_from_t_pct: Some(100.0),
+            pos_from_t_offset: Some(border_size),
+            pos_from_l: Some(0.0),
+            pos_from_r: Some(0.0),
+            height: Some(
+                (widget_height * self.props.drop_down_items as f32)
+                    + (border_size
+                        * (self.props.drop_down_items.checked_sub(1).unwrap_or(0) as f32)),
+            ),
             back_color: Some(self.theme.colors.back2),
             add_z_index: Some(100),
             ..Default::default()
