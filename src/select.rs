@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use basalt::input::MouseButton;
+use basalt::input::{MouseButton, Qwerty};
 use basalt::interface::{Bin, BinPosition, BinStyle, TextHoriAlign, TextVertAlign, TextWrap};
 use parking_lot::ReentrantMutex;
 
@@ -10,21 +10,24 @@ use crate::builder::WidgetBuilder;
 use crate::scroll_bar::down_symbol_verts;
 use crate::{ScrollBar, Theme, WidgetContainer};
 
+/// Builder for [`Select`]
 pub struct SelectBuilder<'a, C, I> {
     widget: WidgetBuilder<'a, C>,
     props: Properties,
     select: Option<I>,
     options: BTreeMap<I, String>,
-    on_select: Vec<Box<dyn FnMut(&Arc<Select<I>>, I) + Send + 'static>>,
+    on_select: Vec<Box<dyn FnMut(&Arc<Select<I>>, Option<I>) + Send + 'static>>,
 }
 
 struct Properties {
+    no_selection_label: String,
     drop_down_items: usize,
 }
 
 impl Default for Properties {
     fn default() -> Self {
         Self {
+            no_selection_label: String::new(),
             drop_down_items: 3,
         }
     }
@@ -45,6 +48,10 @@ where
         }
     }
 
+    /// Add an option with the provided id and label.
+    ///
+    /// **Note**: Ids must be unique. Adding an option of the same id as a previously added id will
+    ///           overwrite the existing option.
     pub fn add_option<L>(mut self, option_id: I, label: L) -> Self
     where
         L: Into<String>,
@@ -53,24 +60,46 @@ where
         self
     }
 
+    /// Set the option to be selected at creation.
+    ///
+    /// **Note**: If the id is not present nothing will be selected.
     pub fn select(mut self, option_id: I) -> Self {
         self.select = Some(option_id);
         self
     }
 
+    /// Set the label to be shown when there is no selection.
+    pub fn no_selection_label<L>(mut self, label: L) -> Self
+    where
+        L: Into<String>,
+    {
+        self.props.no_selection_label = label.into();
+        self
+    }
+
+    /// Set the number of options to be displayed within the drop down.
+    ///
+    /// **Note**: If there are more options than what is specified to be displayed they'll be scrollable.
     pub fn drop_down_items(mut self, count: usize) -> Self {
         self.props.drop_down_items = count;
         self
     }
 
+    /// Add a callback to be called when the selection changed.
+    ///
+    /// **Note**: When changing the state within the callback, no callbacks on this [`Select`]
+    /// will be called.
+    ///
+    /// **Panics**: When adding a callback within the callback to this [`Select`].
     pub fn on_select<F>(mut self, on_select: F) -> Self
     where
-        F: FnMut(&Arc<Select<I>>, I) + Send + 'static,
+        F: FnMut(&Arc<Select<I>>, Option<I>) + Send + 'static,
     {
         self.on_select.push(Box::new(on_select));
         self
     }
 
+    /// Finish building the [`Select`].
     pub fn build(self) -> Arc<Select<I>> {
         let window = self
             .widget
@@ -105,6 +134,17 @@ where
             )
             .build();
 
+        let select_id = match self.select {
+            Some(select_id) => {
+                if self.options.keys().find(|id| **id == select_id).is_some() {
+                    Some(select_id)
+                } else {
+                    None
+                }
+            },
+            None => None,
+        };
+
         let options_state = RefCell::new(BTreeMap::from_iter(self.options.into_iter().map(
             |(id, label)| {
                 let bin = new_bins.next().unwrap();
@@ -128,29 +168,64 @@ where
             scroll_bar,
             option_list,
             state: ReentrantMutex::new(State {
-                select: RefCell::new(self.select),
+                select: RefCell::new(select_id),
                 options: options_state,
                 on_select: RefCell::new(self.on_select),
+                popup: RefCell::new(PopupState {
+                    visible: false,
+                    select_i: None,
+                }),
             }),
         });
 
-        let cb_select = select.clone();
+        for target in [&select.container, &select.arrow_down] {
+            let cb_select = select.clone();
 
-        select
-            .container
-            .on_press(MouseButton::Left, move |_, _, _| {
+            target.on_press(MouseButton::Left, move |_, _, _| {
                 cb_select.toggle_popup();
                 Default::default()
             });
 
-        let cb_select = select.clone();
+            let cb_select = select.clone();
 
-        select
-            .arrow_down
-            .on_press(MouseButton::Left, move |_, _, _| {
-                cb_select.toggle_popup();
+            target.on_press(Qwerty::ArrowDown, move |_, _, _| {
+                cb_select.popup_select_next();
                 Default::default()
             });
+
+            let cb_select = select.clone();
+
+            target.on_press(Qwerty::ArrowUp, move |_, _, _| {
+                cb_select.popup_select_prev();
+                Default::default()
+            });
+
+            let cb_select = select.clone();
+
+            target.on_press(Qwerty::Enter, move |_, _, _| {
+                let state = cb_select.state.lock();
+
+                if state.popup.borrow().visible {
+                    cb_select.popup_finish(false);
+                } else {
+                    cb_select.show_popup();
+                }
+
+                Default::default()
+            });
+
+            let cb_select = select.clone();
+
+            target.on_press(Qwerty::Esc, move |_, _, _| {
+                let state = cb_select.state.lock();
+
+                if state.popup.borrow().visible {
+                    cb_select.popup_finish(true);
+                }
+
+                Default::default()
+            });
+        }
 
         let cb_select = select.clone();
         let mut currently_focused = false;
@@ -197,6 +272,7 @@ where
     }
 }
 
+/// Select widget
 pub struct Select<I> {
     theme: Theme,
     props: Properties,
@@ -211,7 +287,8 @@ pub struct Select<I> {
 struct State<I> {
     select: RefCell<Option<I>>,
     options: RefCell<BTreeMap<I, OptionState>>,
-    on_select: RefCell<Vec<Box<dyn FnMut(&Arc<Select<I>>, I) + Send + 'static>>>,
+    on_select: RefCell<Vec<Box<dyn FnMut(&Arc<Select<I>>, Option<I>) + Send + 'static>>>,
+    popup: RefCell<PopupState>,
 }
 
 struct OptionState {
@@ -219,13 +296,109 @@ struct OptionState {
     bin: Arc<Bin>,
 }
 
+struct PopupState {
+    visible: bool,
+    select_i: Option<usize>,
+}
+
 impl<I> Select<I>
 where
     I: Ord + Copy + Send + 'static,
 {
+    /// Set the currently selected id.
+    ///
+    /// **Note**: This is a no-op if the id is not present.
+    pub fn select(self: &Arc<Self>, option_id: I) {
+        self.select_inner(Some(option_id));
+    }
+
+    /// Clear the selection.
+    pub fn clear_selection(self: &Arc<Self>) {
+        self.select_inner(None);
+    }
+
+    /// Add an option with the provided id and label.
+    ///
+    /// **Note**: Ids must be unique. Adding an option of the same id as a previously added id will
+    ///           overwrite the existing option.
+    pub fn add_option<L>(self: &Arc<Self>, option_id: I, label: L)
+    where
+        L: Into<String>,
+    {
+        let bin = self.container.window().unwrap().new_bin();
+        let state = self.state.lock();
+
+        {
+            let mut options = state.options.borrow_mut();
+            self.add_option_select_hook(option_id, &bin);
+
+            options.insert(
+                option_id,
+                OptionState {
+                    label: label.into(),
+                    bin,
+                },
+            );
+        }
+
+        self.rebuild_list();
+    }
+
+    /// Same as [`add_option`](`Select::add_option`), but selects the newly added option after it has been added.
+    pub fn add_option_selected<L>(self: &Arc<Self>, option_id: I, label: L)
+    where
+        L: Into<String>,
+    {
+        let _state = self.state.lock();
+        self.add_option(option_id, label);
+        self.select_inner(Some(option_id));
+    }
+
+    /// Remove an option with the provided id.
+    ///
+    /// **Notes**:
+    /// - If the id is not present nothing will happen and `false` will be returned.
+    /// - If the id is currently selected, the selection will be cleared.
+    pub fn remove_option(self: &Arc<Self>, option_id: I) -> bool {
+        let state = self.state.lock();
+        let mut options = state.options.borrow_mut();
+        let select = state.select.borrow();
+
+        if options.remove(&option_id).is_some() {
+            let clear_selection = match *select {
+                Some(select_id) => {
+                    if select_id == option_id {
+                        true
+                    } else {
+                        false
+                    }
+                },
+                None => false,
+            };
+
+            drop(select);
+            drop(options);
+
+            if clear_selection {
+                self.clear_selection();
+            }
+
+            self.rebuild_list();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Add a callback to be called when the selection changed.
+    ///
+    /// **Note**: When changing the state within the callback, no callbacks on this [`Select`]
+    /// will be called.
+    ///
+    /// **Panics**: When adding a callback within the callback to this [`Select`].
     pub fn on_select<F>(&self, on_select: F)
     where
-        F: FnMut(&Arc<Select<I>>, I) + Send + 'static,
+        F: FnMut(&Arc<Select<I>>, Option<I>) + Send + 'static,
     {
         self.state
             .lock()
@@ -234,24 +407,42 @@ where
             .push(Box::new(on_select));
     }
 
-    pub fn select(&self, option_id: I) {
+    fn select_inner(self: &Arc<Self>, option_id_op: Option<I>) {
         let state = self.state.lock();
 
         let label = {
             let mut select = state.select.borrow_mut();
             let options = state.options.borrow();
 
-            if let Some(cur_sel_id) = *select {
-                if cur_sel_id == option_id {
-                    return;
-                }
-            }
+            match option_id_op {
+                Some(option_id) => {
+                    match options.get(&option_id) {
+                        Some(option_state) => {
+                            if select.is_some() && select.unwrap() == option_id {
+                                return;
+                            }
 
-            *select = Some(option_id);
+                            *select = option_id_op;
+                            option_state.label.clone()
+                        },
+                        None => {
+                            if select.is_none() {
+                                return;
+                            }
 
-            match options.get(&option_id) {
-                Some(option_state) => option_state.label.clone(),
-                None => String::new(),
+                            *select = None;
+                            self.props.no_selection_label.clone()
+                        },
+                    }
+                },
+                None => {
+                    if select.is_none() {
+                        return;
+                    }
+
+                    *select = None;
+                    self.props.no_selection_label.clone()
+                },
             }
         };
 
@@ -262,7 +453,11 @@ where
             })
             .expect_valid();
 
-        self.rebuild_list();
+        if let Ok(mut callbacks) = state.on_select.try_borrow_mut() {
+            for callback in callbacks.iter_mut() {
+                callback(self, option_id_op);
+            }
+        }
     }
 
     fn add_option_select_hook(self: &Arc<Self>, id: I, bin: &Arc<Bin>) {
@@ -275,33 +470,21 @@ where
     }
 
     fn toggle_popup(&self) {
-        if self
-            .popup
-            .style_inspect(|popup_style| popup_style.hidden.is_some())
-        {
-            self.display_popup();
-        } else {
+        let state = self.state.lock();
+
+        if state.popup.borrow().visible {
             self.hide_popup();
+        } else {
+            self.show_popup();
         }
     }
 
-    fn hide_popup(&self) {
-        let mut style_update_batch = Vec::new();
-        let mut popup_style = self.popup.style_copy();
-        popup_style.hidden = Some(true);
-        style_update_batch.push((&self.popup, popup_style));
+    fn show_popup(&self) {
+        let state = self.state.lock();
+        let select = state.select.borrow();
+        let options = state.options.borrow();
+        let mut popup_state = state.popup.borrow_mut();
 
-        if let Some(border_radius) = self.theme.roundness {
-            let mut container_style = self.container.style_copy();
-            container_style.border_radius_bl = Some(border_radius);
-            container_style.border_radius_br = Some(border_radius);
-            style_update_batch.push((&self.container, container_style));
-        }
-
-        Bin::style_update_batch(style_update_batch);
-    }
-
-    fn display_popup(&self) {
         let mut style_update_batch = Vec::new();
         let mut popup_style = self.popup.style_copy();
         popup_style.hidden = None;
@@ -314,27 +497,67 @@ where
             style_update_batch.push((&self.container, container_style));
         }
 
-        let index = {
-            let state = self.state.lock();
-            let select = state.select.borrow();
-            let options = state.options.borrow();
-
-            match *select {
-                Some(sel_id) => {
-                    match options.keys().enumerate().find(|(_, id)| **id == sel_id) {
-                        Some(some) => some.0,
-                        None => 0,
-                    }
-                },
-                None => 0,
-            }
+        let index = match *select {
+            Some(sel_id) => {
+                match options.keys().enumerate().find(|(_, id)| **id == sel_id) {
+                    Some(some) => Some(some.0),
+                    None => None,
+                }
+            },
+            None => None,
         };
 
-        self.popup_jump_to_index(index);
+        popup_state.select_i = index;
+        popup_state.visible = true;
+
+        for (i, option_state) in options.values().enumerate() {
+            let [back_color, text_color] = if index.is_some() && i == index.unwrap() {
+                [
+                    Some(self.theme.colors.accent1),
+                    Some(self.theme.colors.text1b),
+                ]
+            } else {
+                [None, Some(self.theme.colors.text1a)]
+            };
+
+            if let Some(mut option_style) = option_state.bin.style_inspect(|style| {
+                if style.back_color == back_color && style.text_color == text_color {
+                    None
+                } else {
+                    Some(style.clone())
+                }
+            }) {
+                option_style.back_color = back_color;
+                option_style.text_color = text_color;
+                style_update_batch.push((&option_state.bin, option_style));
+            }
+        }
+
+        self.popup_jump_to(index.unwrap_or(0));
         Bin::style_update_batch(style_update_batch);
     }
 
-    fn popup_jump_to_index(&self, index: usize) {
+    fn hide_popup(&self) {
+        let state = self.state.lock();
+        let mut popup_state = state.popup.borrow_mut();
+
+        let mut style_update_batch = Vec::new();
+        let mut popup_style = self.popup.style_copy();
+        popup_style.hidden = Some(true);
+        style_update_batch.push((&self.popup, popup_style));
+
+        if let Some(border_radius) = self.theme.roundness {
+            let mut container_style = self.container.style_copy();
+            container_style.border_radius_bl = Some(border_radius);
+            container_style.border_radius_br = Some(border_radius);
+            style_update_batch.push((&self.container, container_style));
+        }
+
+        popup_state.visible = false;
+        Bin::style_update_batch(style_update_batch);
+    }
+
+    fn popup_jump_to(&self, index: usize) {
         let jump_index = index
             .checked_sub(self.props.drop_down_items / 3)
             .unwrap_or(0);
@@ -345,16 +568,86 @@ where
         self.scroll_bar.jump_to(jump_to);
     }
 
+    fn popup_select_prev(&self) {
+        let state = self.state.lock();
+
+        let index = match state.popup.borrow().select_i {
+            Some(select_i) => select_i.checked_sub(1).unwrap_or(0),
+            None => 0,
+        };
+
+        self.popup_select(index);
+    }
+
+    fn popup_select_next(&self) {
+        let state = self.state.lock();
+
+        let index = match state.popup.borrow().select_i {
+            Some(select_i) => select_i + 1,
+            None => 0,
+        };
+
+        self.popup_select(index);
+    }
+
+    fn popup_select(&self, mut index: usize) {
+        let state = self.state.lock();
+        let options = state.options.borrow();
+        let mut popup = state.popup.borrow_mut();
+        index = index.min(options.len().checked_sub(1).unwrap_or(0));
+
+        if popup.select_i.is_some() && index == popup.select_i.unwrap() {
+            return;
+        }
+
+        let mut style_update_batch = Vec::new();
+
+        for (i, option_state) in options.values().enumerate() {
+            if popup.select_i.is_some() && i == popup.select_i.unwrap() {
+                let mut option_style = option_state.bin.style_copy();
+                option_style.back_color = None;
+                option_style.text_color = Some(self.theme.colors.text1a);
+                style_update_batch.push((&option_state.bin, option_style));
+            } else if i == index {
+                let mut option_style = option_state.bin.style_copy();
+                option_style.back_color = Some(self.theme.colors.accent1);
+                option_style.text_color = Some(self.theme.colors.text1b);
+                style_update_batch.push((&option_state.bin, option_style));
+            }
+
+            if style_update_batch.len() == 2 {
+                break;
+            }
+        }
+
+        popup.select_i = Some(index);
+        Bin::style_update_batch(style_update_batch);
+        self.popup_jump_to(index);
+    }
+
+    fn popup_finish(self: &Arc<Self>, esc: bool) {
+        let state = self.state.lock();
+        self.hide_popup();
+
+        if !esc {
+            let option_id_op = match state.popup.borrow().select_i {
+                Some(select_i) => state.options.borrow().keys().skip(select_i).next().copied(),
+                None => None,
+            };
+
+            self.select_inner(option_id_op);
+        }
+    }
+
     fn rebuild_list(&self) {
         let state = self.state.lock();
         let options = state.options.borrow();
-        let select = state.select.borrow();
         let num_options = options.len();
 
         if !options.is_empty() {
             let mut styles = Vec::with_capacity(num_options);
 
-            for (i, (id, option_state)) in options.iter().enumerate() {
+            for (i, option_state) in options.values().enumerate() {
                 let mut option_style = BinStyle {
                     position: Some(BinPosition::Parent),
                     pos_from_t: Some(
@@ -383,13 +676,6 @@ where
                     if let Some(border_size) = self.theme.border {
                         option_style.border_size_b = Some(border_size);
                         option_style.border_color_b = Some(self.theme.colors.border2);
-                    }
-                }
-
-                if let Some(select_id) = *select {
-                    if select_id == *id {
-                        option_style.back_color = Some(self.theme.colors.accent1);
-                        option_style.text_color = Some(self.theme.colors.text1b);
                     }
                 }
 
@@ -473,15 +759,21 @@ where
             ..Default::default()
         };
 
-        {
+        container_style.text = {
             let state = self.state.lock();
+            let select = state.select.borrow();
+            let options = state.options.borrow();
 
-            if let Some(option_id) = &*state.select.borrow() {
-                if let Some(option_state) = state.options.borrow().get(option_id) {
-                    container_style.text = option_state.label.clone();
-                }
+            match *select {
+                Some(select_id) => {
+                    match options.get(&select_id) {
+                        Some(option_state) => option_state.label.clone(),
+                        None => self.props.no_selection_label.clone(),
+                    }
+                },
+                None => self.props.no_selection_label.clone(),
             }
-        }
+        };
 
         if let Some(border_size) = self.theme.border {
             container_style.border_size_t = Some(border_size);
