@@ -6,6 +6,7 @@
 
 pub mod builder;
 pub mod error;
+pub mod placement;
 
 mod button;
 mod check_box;

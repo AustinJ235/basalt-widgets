@@ -233,7 +233,7 @@ fn main() {
         // -- //
 
         let mut renderer = Renderer::new(window).unwrap();
-        renderer.interface_only().msaa(MSAA::X4);
+        renderer.interface_only().msaa(MSAA::X8);
 
         match renderer.run() {
             Ok(_) | Err(RendererError::Closed) => (),
