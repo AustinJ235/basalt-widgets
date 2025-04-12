@@ -145,7 +145,7 @@ where
             if !cb_button_pressed.load(atomic::Ordering::SeqCst) && !cb_toggle_button.get() {
                 let mut style = cb_toggle_button.container.style_copy();
                 style.back_color = cb_toggle_button.theme.colors.accent1;
-                style.text.base_attrs.color = cb_toggle_button.theme.colors.text1b;
+                style.text_body.base_attrs.color = cb_toggle_button.theme.colors.text1b;
 
                 cb_toggle_button
                     .container
@@ -166,7 +166,7 @@ where
             if !cb_button_pressed.load(atomic::Ordering::SeqCst) && !cb_toggle_button.get() {
                 let mut style = cb_toggle_button.container.style_copy();
                 style.back_color = cb_toggle_button.theme.colors.back3;
-                style.text.base_attrs.color = cb_toggle_button.theme.colors.text1a;
+                style.text_body.base_attrs.color = cb_toggle_button.theme.colors.text1a;
 
                 cb_toggle_button
                     .container
@@ -202,10 +202,10 @@ where
 
                     if cb_cursor_inside.load(atomic::Ordering::SeqCst) {
                         style.back_color = cb_toggle_button.theme.colors.accent1;
-                        style.text.base_attrs.color = cb_toggle_button.theme.colors.text1b;
+                        style.text_body.base_attrs.color = cb_toggle_button.theme.colors.text1b;
                     } else {
                         style.back_color = cb_toggle_button.theme.colors.back3;
-                        style.text.base_attrs.color = cb_toggle_button.theme.colors.text1a;
+                        style.text_body.base_attrs.color = cb_toggle_button.theme.colors.text1a;
                     }
 
                     cb_toggle_button
@@ -243,9 +243,9 @@ impl ToggleButton {
 
         let mut style = self.container.style_copy();
         style.back_color = self.theme.colors.accent2;
-        style.text.base_attrs.color = self.theme.colors.text1b;
+        style.text_body.base_attrs.color = self.theme.colors.text1b;
 
-        style.text.spans[0].text = if enabled {
+        style.text_body.spans[0].text = if enabled {
             self.props.enabled_text.clone()
         } else {
             self.props.disabled_text.clone()
@@ -299,7 +299,7 @@ impl ToggleButton {
             margin_b: Pixels(self.theme.spacing),
             margin_l: Pixels(self.theme.spacing),
             margin_r: Pixels(self.theme.spacing),
-            text: TextBody {
+            text_body: TextBody {
                 spans: vec![Default::default()],
                 hori_align: TextHoriAlign::Center,
                 vert_align: TextVertAlign::Center,
@@ -317,10 +317,10 @@ impl ToggleButton {
 
         if *self.state.lock().enabled.borrow() {
             container_style.back_color = self.theme.colors.accent2;
-            container_style.text.base_attrs.color = self.theme.colors.text1b;
+            container_style.text_body.base_attrs.color = self.theme.colors.text1b;
         } else {
             container_style.back_color = self.theme.colors.back3;
-            container_style.text.base_attrs.color = self.theme.colors.text1a;
+            container_style.text_body.base_attrs.color = self.theme.colors.text1a;
         }
 
         let initial_text = if self.props.enabled {
@@ -332,10 +332,10 @@ impl ToggleButton {
         match self.props.width {
             Some(width) => {
                 container_style.width = Pixels(width);
-                container_style.text.spans[0].text = initial_text;
+                container_style.text_body.spans[0].text = initial_text;
             },
             None => {
-                container_style.text.spans[0].text = (0..self
+                container_style.text_body.spans[0].text = (0..self
                     .props
                     .disabled_text
                     .len()
@@ -353,7 +353,7 @@ impl ToggleButton {
                     container.style_modify(|style| {
                         style.visibility = Visibility::Inheirt;
                         style.width = width;
-                        style.text.spans[0].text = initial_text.clone();
+                        style.text_body.spans[0].text = initial_text.clone();
                     });
                 });
             },

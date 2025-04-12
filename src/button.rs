@@ -167,7 +167,7 @@ impl Button {
             margin_l: Pixels(self.theme.spacing),
             margin_r: Pixels(self.theme.spacing),
             back_color: self.theme.colors.back3,
-            text: TextBody {
+            text_body: TextBody {
                 hori_align: TextHoriAlign::Center,
                 vert_align: TextVertAlign::Center,
                 text_wrap: TextWrap::None,
@@ -269,7 +269,7 @@ where
             let mut style = button.style_copy();
 
             if let Some(h_text_clr) = colors.h_text_clr {
-                style.text.base_attrs.color = h_text_clr;
+                style.text_body.base_attrs.color = h_text_clr;
             }
 
             if let Some(h_back_clr) = colors.h_back_clr {
@@ -304,7 +304,7 @@ where
             let mut style = button.style_copy();
 
             if let Some(text_clr) = colors.text_clr {
-                style.text.base_attrs.color = text_clr;
+                style.text_body.base_attrs.color = text_clr;
             }
 
             if let Some(back_clr) = colors.back_clr {
@@ -335,7 +335,7 @@ where
             let mut style = button.style_copy();
 
             if let Some(p_text_clr) = colors.p_text_clr {
-                style.text.base_attrs.color = p_text_clr;
+                style.text_body.base_attrs.color = p_text_clr;
             }
 
             if let Some(p_back_clr) = colors.p_back_clr {
@@ -371,7 +371,7 @@ where
             let mut style = button.style_copy();
 
             if let Some(h_text_clr) = colors.h_text_clr {
-                style.text.base_attrs.color = h_text_clr;
+                style.text_body.base_attrs.color = h_text_clr;
             }
 
             if let Some(h_back_clr) = colors.h_back_clr {
@@ -390,7 +390,7 @@ where
             let mut style = button.style_copy();
 
             if let Some(text_clr) = colors.text_clr {
-                style.text.base_attrs.color = text_clr;
+                style.text_body.base_attrs.color = text_clr;
             }
 
             if let Some(back_clr) = colors.back_clr {

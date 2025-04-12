@@ -218,7 +218,7 @@ fn main() {
                 margin_b: Pixels(10.0),
                 height: Pixels(75.0),
                 back_color: theme.colors.back3,
-                text: format!("{}", i).into(),
+                text_body: format!("{}", i).into(),
                 ..Default::default()
             })
             .expect_valid();

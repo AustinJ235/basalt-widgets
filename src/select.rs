@@ -451,7 +451,7 @@ where
         };
 
         self.container.style_modify(move |style| {
-            style.text.spans[0].text = label.clone(); // TODO: Why Clone???
+            style.text_body.spans[0].text = label.clone(); // TODO: Why Clone???
         });
 
         if let Ok(mut callbacks) = state.on_select.try_borrow_mut() {
@@ -519,14 +519,15 @@ where
             };
 
             if let Some(mut option_style) = option_state.bin.style_inspect(|style| {
-                if style.back_color == back_color && style.text.base_attrs.color == text_color {
+                if style.back_color == back_color && style.text_body.base_attrs.color == text_color
+                {
                     None
                 } else {
                     Some(style.clone())
                 }
             }) {
                 option_style.back_color = back_color;
-                option_style.text.base_attrs.color = text_color;
+                option_style.text_body.base_attrs.color = text_color;
                 style_update_batch.push((&option_state.bin, option_style));
             }
         }
@@ -604,12 +605,12 @@ where
             if popup.select_i.is_some() && i == popup.select_i.unwrap() {
                 let mut option_style = option_state.bin.style_copy();
                 option_style.back_color = Default::default();
-                option_style.text.base_attrs.color = self.theme.colors.text1a;
+                option_style.text_body.base_attrs.color = self.theme.colors.text1a;
                 style_update_batch.push((&option_state.bin, option_style));
             } else if i == index {
                 let mut option_style = option_state.bin.style_copy();
                 option_style.back_color = self.theme.colors.accent1;
-                option_style.text.base_attrs.color = self.theme.colors.text1b;
+                option_style.text_body.base_attrs.color = self.theme.colors.text1b;
                 style_update_batch.push((&option_state.bin, option_style));
             }
 
@@ -658,7 +659,7 @@ where
                     height: Pixels(self.theme.spacing + self.theme.base_size),
                     padding_l: Pixels(self.theme.spacing),
                     padding_r: Pixels(self.theme.spacing),
-                    text: TextBody {
+                    text_body: TextBody {
                         hori_align: TextHoriAlign::Left,
                         vert_align: TextVertAlign::Center,
                         text_wrap: TextWrap::None,
@@ -709,9 +710,7 @@ where
             padding_l: Pixels(self.theme.spacing),
             padding_r: Pixels(widget_height),
             back_color: self.theme.colors.back3,
-            overflow_y: true,
-            overflow_x: true,
-            text: TextBody {
+            text_body: TextBody {
                 spans: vec![Default::default()],
                 hori_align: TextHoriAlign::Left,
                 vert_align: TextVertAlign::Center,
@@ -742,6 +741,7 @@ where
         };
 
         let mut popup_style = BinStyle {
+            position: Position::Anchor,
             z_index: ZIndex::Offset(100),
             visibility: Visibility::Hide,
             pos_from_t: PctOffsetPx(100.0, border_size),
@@ -764,7 +764,7 @@ where
             ..Default::default()
         };
 
-        container_style.text.spans[0].text = {
+        container_style.text_body.spans[0].text = {
             let state = self.state.lock();
             let select = state.select.borrow();
             let options = state.options.borrow();

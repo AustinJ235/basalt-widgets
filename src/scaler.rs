@@ -594,6 +594,7 @@ impl Scaler {
         };
 
         let mut knob_style = BinStyle {
+            position: Position::Anchor,
             back_color: self.theme.colors.accent1,
             border_radius_tl: knob_size / 2.0,
             border_radius_tr: knob_size / 2.0,
@@ -613,7 +614,6 @@ impl Scaler {
                 confine_style.pos_from_b = Pixels(0.0);
                 confine_style.pos_from_l = Pixels(border_size);
                 confine_style.pos_from_r = Pixels(widget_height - border_size);
-                confine_style.overflow_x = true;
 
                 knob_style.pos_from_t = Pixels(border_size);
                 knob_style.pos_from_b = Pixels(border_size);
@@ -630,7 +630,6 @@ impl Scaler {
                 confine_style.pos_from_b = Pixels(border_size);
                 confine_style.pos_from_l = Pixels(0.0);
                 confine_style.pos_from_r = Pixels(0.0);
-                confine_style.overflow_y = true;
 
                 knob_style.pos_from_l = Pixels(border_size);
                 knob_style.pos_from_r = Pixels(border_size);

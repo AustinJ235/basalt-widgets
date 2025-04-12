@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use basalt::input::MouseButton;
 use basalt::interface::UnitValue::{Percent, Pixels};
-use basalt::interface::{Bin, BinID, BinStyle, BinVert, Color};
+use basalt::interface::{Bin, BinID, BinStyle, BinVert, Color, Position};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
@@ -866,6 +866,7 @@ impl ScrollBar {
         };
 
         let mut bar_style = BinStyle {
+            position: Position::Anchor,
             back_color: self.theme.colors.accent1,
             ..Default::default()
         };
@@ -895,7 +896,6 @@ impl ScrollBar {
                 confine_style.pos_from_b = Pixels(spacing);
                 confine_style.pos_from_l = Pixels(size + border_size);
                 confine_style.pos_from_r = Pixels(size + border_size);
-                confine_style.overflow_x = true;
 
                 bar_style.pos_from_t = Pixels(0.0);
                 bar_style.pos_from_b = Pixels(0.0);
@@ -926,7 +926,6 @@ impl ScrollBar {
                 confine_style.pos_from_b = Pixels(size + border_size);
                 confine_style.pos_from_l = Pixels(spacing);
                 confine_style.pos_from_r = Pixels(spacing);
-                confine_style.overflow_y = true;
 
                 bar_style.pos_from_t = Percent(0.0);
                 bar_style.pos_from_l = Pixels(0.0);

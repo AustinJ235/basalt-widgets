@@ -251,7 +251,7 @@ where
             if c.is_new_line() {
                 let val: i32 = cb_spin_button
                     .entry
-                    .style_inspect(|style| style.text.spans[0].text.parse::<i32>())
+                    .style_inspect(|style| style.text_body.spans[0].text.parse::<i32>())
                     .unwrap_or(cb_spin_button.props.val);
 
                 cb_spin_button
@@ -263,7 +263,7 @@ where
                 cb_spin_button.set(val);
             } else if c.is_backspace() {
                 let mut entry_style = cb_spin_button.entry.style_copy();
-                entry_style.text.spans[0].text.pop();
+                entry_style.text_body.spans[0].text.pop();
 
                 cb_spin_button
                     .entry
@@ -271,7 +271,7 @@ where
                     .expect_valid();
             } else if c.0.is_numeric() {
                 let mut entry_style = cb_spin_button.entry.style_copy();
-                entry_style.text.spans[0].text.push(c.0);
+                entry_style.text_body.spans[0].text.push(c.0);
 
                 cb_spin_button
                     .entry
@@ -360,7 +360,7 @@ impl SpinButton {
         *state.val.borrow_mut() = val;
 
         self.entry.style_modify(|style| {
-            style.text.spans[0].text = format!("{}", val);
+            style.text_body.spans[0].text = format!("{}", val);
         });
 
         if let Ok(mut on_change_cbs) = state.on_change.try_borrow_mut() {
@@ -455,7 +455,7 @@ impl SpinButton {
             border_color_l: self.theme.colors.accent1,
             border_color_r: self.theme.colors.accent1,
             padding_l: Pixels(self.theme.spacing),
-            text: TextBody {
+            text_body: TextBody {
                 spans: vec![Default::default()],
                 hori_align: TextHoriAlign::Left,
                 vert_align: TextVertAlign::Center,
@@ -534,7 +534,7 @@ impl SpinButton {
             Some(width) => {
                 let min_widget_width = (widget_height * 3.0) + (border_size * 2.0);
                 container_style.width = Pixels(min_widget_width.max(width));
-                entry_style.text.spans[0].text = format!("{}", self.props.val);
+                entry_style.text_body.spans[0].text = format!("{}", self.props.val);
             },
             None => {
                 let min_val_places = self.props.min.abs().checked_ilog10().unwrap_or(0) + 1;
@@ -549,7 +549,7 @@ impl SpinButton {
                 let base_widget_width =
                     (widget_height * 2.0) + (border_size * 2.0) + self.theme.spacing;
 
-                entry_style.text.spans[0].text = (0..places).map(|_| '9').collect();
+                entry_style.text_body.spans[0].text = (0..places).map(|_| '9').collect();
                 container_style.width = Pixels(base_widget_width);
                 container_style.visibility = Visibility::Hide;
 
@@ -570,7 +570,7 @@ impl SpinButton {
                         .expect_valid();
 
                     cb_spin_button.entry.style_modify(|style| {
-                        style.text.spans[0].text = format!("{}", cb_spin_button.props.val);
+                        style.text_body.spans[0].text = format!("{}", cb_spin_button.props.val);
                     });
                 });
             },
