@@ -2,7 +2,8 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use basalt::input::MouseButton;
-use basalt::interface::{Bin, BinPosition, BinStyle};
+use basalt::interface::UnitValue::{Percent, Pixels};
+use basalt::interface::{Bin, BinStyle, Position};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
@@ -143,7 +144,7 @@ impl ProgressBar {
 
         self.fill
             .style_update(BinStyle {
-                width_pct: Some(pct),
+                width: Percent(pct),
                 ..self.fill.style_copy()
             })
             .expect_valid();
@@ -200,48 +201,47 @@ impl ProgressBar {
         let pct = *self.state.lock().pct.borrow();
 
         let mut container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            height: Some(widget_height),
-            width: Some(widget_width),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
-            back_color: Some(self.theme.colors.back2),
+            position: Position::Floating,
+            height: Pixels(widget_height),
+            width: Pixels(widget_width),
+            margin_t: Pixels(self.theme.spacing),
+            margin_b: Pixels(self.theme.spacing),
+            margin_l: Pixels(self.theme.spacing),
+            margin_r: Pixels(self.theme.spacing),
+            back_color: self.theme.colors.back2,
             ..Default::default()
         };
 
         let mut fill_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            pos_from_t: Some(0.0),
-            pos_from_b: Some(0.0),
-            pos_from_l: Some(0.0),
-            width_pct: Some(pct),
-            back_color: Some(self.theme.colors.accent1),
+            pos_from_t: Pixels(0.0),
+            pos_from_b: Pixels(0.0),
+            pos_from_l: Pixels(0.0),
+            width: Percent(pct),
+            back_color: self.theme.colors.accent1,
             ..Default::default()
         };
 
         if let Some(border_size) = self.theme.border {
-            container_style.border_size_t = Some(border_size);
-            container_style.border_size_b = Some(border_size);
-            container_style.border_size_l = Some(border_size);
-            container_style.border_size_r = Some(border_size);
-            container_style.border_color_t = Some(self.theme.colors.border1);
-            container_style.border_color_b = Some(self.theme.colors.border1);
-            container_style.border_color_l = Some(self.theme.colors.border1);
-            container_style.border_color_r = Some(self.theme.colors.border1);
+            container_style.border_size_t = Pixels(border_size);
+            container_style.border_size_b = Pixels(border_size);
+            container_style.border_size_l = Pixels(border_size);
+            container_style.border_size_r = Pixels(border_size);
+            container_style.border_color_t = self.theme.colors.border1;
+            container_style.border_color_b = self.theme.colors.border1;
+            container_style.border_color_l = self.theme.colors.border1;
+            container_style.border_color_r = self.theme.colors.border1;
         }
 
         if let Some(roundness) = self.theme.roundness {
             let radius = widget_height_1_2.min(roundness);
-            container_style.border_radius_tl = Some(radius);
-            container_style.border_radius_tr = Some(radius);
-            container_style.border_radius_bl = Some(radius);
-            container_style.border_radius_br = Some(radius);
-            fill_style.border_radius_tl = Some(radius);
-            fill_style.border_radius_tr = Some(radius);
-            fill_style.border_radius_bl = Some(radius);
-            fill_style.border_radius_br = Some(radius);
+            container_style.border_radius_tl = radius;
+            container_style.border_radius_tr = radius;
+            container_style.border_radius_bl = radius;
+            container_style.border_radius_br = radius;
+            fill_style.border_radius_tl = radius;
+            fill_style.border_radius_tr = radius;
+            fill_style.border_radius_bl = radius;
+            fill_style.border_radius_br = radius;
         }
 
         Bin::style_update_batch([(&self.container, container_style), (&self.fill, fill_style)]);

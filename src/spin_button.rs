@@ -2,8 +2,10 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use basalt::input::{Qwerty, WindowState};
+use basalt::interface::UnitValue::{Pixels, Undefined};
 use basalt::interface::{
-    Bin, BinPosition, BinStyle, BinVert, Color, TextHoriAlign, TextVertAlign, TextWrap,
+    Bin, BinStyle, BinVert, Color, Position, TextAttrs, TextBody, TextHoriAlign, TextVertAlign,
+    TextWrap, Visibility, ZIndex,
 };
 use parking_lot::ReentrantMutex;
 
@@ -249,7 +251,7 @@ where
             if c.is_new_line() {
                 let val: i32 = cb_spin_button
                     .entry
-                    .style_inspect(|style| style.text.parse::<i32>())
+                    .style_inspect(|style| style.text.spans[0].text.parse::<i32>())
                     .unwrap_or(cb_spin_button.props.val);
 
                 cb_spin_button
@@ -261,7 +263,7 @@ where
                 cb_spin_button.set(val);
             } else if c.is_backspace() {
                 let mut entry_style = cb_spin_button.entry.style_copy();
-                entry_style.text.pop();
+                entry_style.text.spans[0].text.pop();
 
                 cb_spin_button
                     .entry
@@ -269,7 +271,7 @@ where
                     .expect_valid();
             } else if c.0.is_numeric() {
                 let mut entry_style = cb_spin_button.entry.style_copy();
-                entry_style.text.push(c.0);
+                entry_style.text.spans[0].text.push(c.0);
 
                 cb_spin_button
                     .entry
@@ -288,10 +290,10 @@ where
             cb_spin_button
                 .entry
                 .style_update(BinStyle {
-                    border_size_t: Some(border_size),
-                    border_size_b: Some(border_size),
-                    border_size_l: Some(border_size),
-                    border_size_r: Some(border_size),
+                    border_size_t: Pixels(border_size),
+                    border_size_b: Pixels(border_size),
+                    border_size_l: Pixels(border_size),
+                    border_size_r: Pixels(border_size),
                     ..cb_spin_button.entry.style_copy()
                 })
                 .expect_valid();
@@ -305,10 +307,10 @@ where
             cb_spin_button
                 .entry
                 .style_update(BinStyle {
-                    border_size_t: None,
-                    border_size_b: None,
-                    border_size_l: None,
-                    border_size_r: None,
+                    border_size_t: Undefined,
+                    border_size_b: Undefined,
+                    border_size_l: Undefined,
+                    border_size_r: Undefined,
                     ..cb_spin_button.entry.style_copy()
                 })
                 .expect_valid();
@@ -357,12 +359,9 @@ impl SpinButton {
         let val = val.clamp(self.props.min, self.props.max);
         *state.val.borrow_mut() = val;
 
-        self.entry
-            .style_update(BinStyle {
-                text: format!("{}", val),
-                ..self.entry.style_copy()
-            })
-            .expect_valid();
+        self.entry.style_modify(|style| {
+            style.text.spans[0].text = format!("{}", val);
+        });
 
         if let Ok(mut on_change_cbs) = state.on_change.try_borrow_mut() {
             for on_change in on_change_cbs.iter_mut() {
@@ -435,45 +434,50 @@ impl SpinButton {
         };
 
         let mut container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
-            height: Some(widget_height),
+            position: Position::Floating,
+            margin_t: Pixels(self.theme.spacing),
+            margin_b: Pixels(self.theme.spacing),
+            margin_l: Pixels(self.theme.spacing),
+            margin_r: Pixels(self.theme.spacing),
+            height: Pixels(widget_height),
             ..Default::default()
         };
 
         let mut entry_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            add_z_index: Some(1),
-            pos_from_t: Some(0.0),
-            pos_from_l: Some(0.0),
-            pos_from_b: Some(0.0),
-            pos_from_r: Some((widget_height * 2.0) + (border_size * 2.0)),
-            back_color: Some(self.theme.colors.back2),
-            border_color_t: Some(self.theme.colors.accent1),
-            border_color_b: Some(self.theme.colors.accent1),
-            border_color_l: Some(self.theme.colors.accent1),
-            border_color_r: Some(self.theme.colors.accent1),
-            text_height: Some(text_height),
-            text_color: Some(self.theme.colors.text1a),
-            text_hori_align: Some(TextHoriAlign::Left),
-            text_vert_align: Some(TextVertAlign::Center),
-            text_wrap: Some(TextWrap::None),
-            font_family: Some(self.theme.font_family.clone()),
-            font_weight: Some(self.theme.font_weight),
-            pad_l: Some(self.theme.spacing),
+            z_index: ZIndex::Offset(1),
+            pos_from_t: Pixels(0.0),
+            pos_from_l: Pixels(0.0),
+            pos_from_b: Pixels(0.0),
+            pos_from_r: Pixels((widget_height * 2.0) + (border_size * 2.0)),
+            back_color: self.theme.colors.back2,
+            border_color_t: self.theme.colors.accent1,
+            border_color_b: self.theme.colors.accent1,
+            border_color_l: self.theme.colors.accent1,
+            border_color_r: self.theme.colors.accent1,
+            padding_l: Pixels(self.theme.spacing),
+            text: TextBody {
+                spans: vec![Default::default()],
+                hori_align: TextHoriAlign::Left,
+                vert_align: TextVertAlign::Center,
+                text_wrap: TextWrap::None,
+                base_attrs: TextAttrs {
+                    height: Pixels(text_height),
+                    color: self.theme.colors.text1a,
+                    font_family: self.theme.font_family.clone(),
+                    font_weight: self.theme.font_weight,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
             ..Default::default()
         };
 
         let mut sub_button_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            pos_from_t: Some(0.0),
-            pos_from_r: Some(widget_height + border_size),
-            pos_from_b: Some(0.0),
-            width: Some(widget_height),
-            back_color: Some(self.theme.colors.back3),
+            pos_from_t: Pixels(0.0),
+            pos_from_r: Pixels(widget_height + border_size),
+            pos_from_b: Pixels(0.0),
+            width: Pixels(widget_height),
+            back_color: self.theme.colors.back3,
             custom_verts: sub_symbol_verts(
                 text_height,
                 self.theme.spacing,
@@ -483,12 +487,11 @@ impl SpinButton {
         };
 
         let mut add_button_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            pos_from_t: Some(0.0),
-            pos_from_r: Some(0.0),
-            pos_from_b: Some(0.0),
-            width: Some(widget_height),
-            back_color: Some(self.theme.colors.back3),
+            pos_from_t: Pixels(0.0),
+            pos_from_r: Pixels(0.0),
+            pos_from_b: Pixels(0.0),
+            width: Pixels(widget_height),
+            back_color: self.theme.colors.back3,
             custom_verts: add_symbol_verts(
                 text_height,
                 self.theme.spacing,
@@ -498,40 +501,40 @@ impl SpinButton {
         };
 
         if let Some(border_size) = self.theme.border {
-            container_style.border_size_t = Some(border_size);
-            container_style.border_size_b = Some(border_size);
-            container_style.border_size_l = Some(border_size);
-            container_style.border_size_r = Some(border_size);
-            container_style.border_color_t = Some(self.theme.colors.border1);
-            container_style.border_color_b = Some(self.theme.colors.border1);
-            container_style.border_color_l = Some(self.theme.colors.border1);
-            container_style.border_color_r = Some(self.theme.colors.border1);
+            container_style.border_size_t = Pixels(border_size);
+            container_style.border_size_b = Pixels(border_size);
+            container_style.border_size_l = Pixels(border_size);
+            container_style.border_size_r = Pixels(border_size);
+            container_style.border_color_t = self.theme.colors.border1;
+            container_style.border_color_b = self.theme.colors.border1;
+            container_style.border_color_l = self.theme.colors.border1;
+            container_style.border_color_r = self.theme.colors.border1;
 
-            sub_button_style.border_size_l = Some(border_size);
-            sub_button_style.border_color_l = Some(self.theme.colors.border2);
+            sub_button_style.border_size_l = Pixels(border_size);
+            sub_button_style.border_color_l = self.theme.colors.border2;
 
-            add_button_style.border_size_l = Some(border_size);
-            add_button_style.border_color_l = Some(self.theme.colors.border2);
+            add_button_style.border_size_l = Pixels(border_size);
+            add_button_style.border_color_l = self.theme.colors.border2;
         }
 
         if let Some(border_radius) = self.theme.roundness {
-            container_style.border_radius_tl = Some(border_radius);
-            container_style.border_radius_tr = Some(border_radius);
-            container_style.border_radius_bl = Some(border_radius);
-            container_style.border_radius_br = Some(border_radius);
+            container_style.border_radius_tl = border_radius;
+            container_style.border_radius_tr = border_radius;
+            container_style.border_radius_bl = border_radius;
+            container_style.border_radius_br = border_radius;
 
-            entry_style.border_radius_tl = Some(border_radius);
-            entry_style.border_radius_bl = Some(border_radius);
+            entry_style.border_radius_tl = border_radius;
+            entry_style.border_radius_bl = border_radius;
 
-            add_button_style.border_radius_tr = Some(border_radius);
-            add_button_style.border_radius_br = Some(border_radius);
+            add_button_style.border_radius_tr = border_radius;
+            add_button_style.border_radius_br = border_radius;
         }
 
         match self.props.width {
             Some(width) => {
                 let min_widget_width = (widget_height * 3.0) + (border_size * 2.0);
-                container_style.width = Some(min_widget_width.max(width));
-                entry_style.text = format!("{}", self.props.val);
+                container_style.width = Pixels(min_widget_width.max(width));
+                entry_style.text.spans[0].text = format!("{}", self.props.val);
             },
             None => {
                 let min_val_places = self.props.min.abs().checked_ilog10().unwrap_or(0) + 1;
@@ -546,9 +549,9 @@ impl SpinButton {
                 let base_widget_width =
                     (widget_height * 2.0) + (border_size * 2.0) + self.theme.spacing;
 
-                entry_style.text = (0..places).map(|_| '9').collect();
-                container_style.width = Some(base_widget_width);
-                container_style.hidden = Some(true);
+                entry_style.text.spans[0].text = (0..places).map(|_| '9').collect();
+                container_style.width = Pixels(base_widget_width);
+                container_style.visibility = Visibility::Hide;
 
                 let cb_spin_button = self.clone();
 
@@ -556,23 +559,19 @@ impl SpinButton {
                     cb_spin_button
                         .container
                         .style_update(BinStyle {
-                            width: Some(
+                            width: Pixels(
                                 base_widget_width
                                     + cb_spin_button.entry.calc_hori_overflow()
                                     + cb_spin_button.theme.spacing,
                             ),
-                            hidden: None,
+                            visibility: Visibility::Inheirt,
                             ..cb_spin_button.container.style_copy()
                         })
                         .expect_valid();
 
-                    cb_spin_button
-                        .entry
-                        .style_update(BinStyle {
-                            text: format!("{}", cb_spin_button.props.val),
-                            ..cb_spin_button.entry.style_copy()
-                        })
-                        .expect_valid();
+                    cb_spin_button.entry.style_modify(|style| {
+                        style.text.spans[0].text = format!("{}", cb_spin_button.props.val);
+                    });
                 });
             },
         }

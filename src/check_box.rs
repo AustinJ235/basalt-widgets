@@ -2,7 +2,8 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use basalt::input::MouseButton;
-use basalt::interface::{Bin, BinPosition, BinStyle, BinVert, Color};
+use basalt::interface::UnitValue::Pixels;
+use basalt::interface::{Bin, BinStyle, BinVert, Color, Position, Visibility};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
@@ -183,9 +184,9 @@ impl<T> CheckBox<T> {
         let mut fill_style = self.fill.style_copy();
 
         if selected {
-            fill_style.hidden = None;
+            fill_style.visibility = Visibility::Inheirt;
         } else {
-            fill_style.hidden = Some(true);
+            fill_style.visibility = Visibility::Hide;
         }
 
         self.fill.style_update(fill_style).expect_valid();
@@ -203,53 +204,52 @@ impl<T> CheckBox<T> {
         let check_space = (width_1_2 / 12.0).round().max(1.0);
 
         let mut container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
-            width: Some(width),
-            height: Some(width),
-            back_color: Some(self.theme.colors.back2),
-            border_radius_tl: Some(width_1_2),
-            border_radius_tr: Some(width_1_2),
-            border_radius_bl: Some(width_1_2),
-            border_radius_br: Some(width_1_2),
+            position: Position::Floating,
+            margin_t: Pixels(self.theme.spacing),
+            margin_b: Pixels(self.theme.spacing),
+            margin_l: Pixels(self.theme.spacing),
+            margin_r: Pixels(self.theme.spacing),
+            width: Pixels(width),
+            height: Pixels(width),
+            back_color: self.theme.colors.back2,
+            border_radius_tl: width_1_2,
+            border_radius_tr: width_1_2,
+            border_radius_bl: width_1_2,
+            border_radius_br: width_1_2,
             ..Default::default()
         };
 
         let mut fill_style = BinStyle {
-            hidden: Some(true),
-            position: Some(BinPosition::Parent),
-            pos_from_t: Some(0.0),
-            pos_from_b: Some(0.0),
-            pos_from_l: Some(0.0),
-            pos_from_r: Some(0.0),
+            visibility: Visibility::Hide,
+            pos_from_t: Pixels(0.0),
+            pos_from_b: Pixels(0.0),
+            pos_from_l: Pixels(0.0),
+            pos_from_r: Pixels(0.0),
             custom_verts: check_symbol_verts(width, check_space, self.theme.colors.accent1),
             ..Default::default()
         };
 
         if let Some(border_size) = self.theme.border {
-            container_style.border_size_t = Some(border_size);
-            container_style.border_size_b = Some(border_size);
-            container_style.border_size_l = Some(border_size);
-            container_style.border_size_r = Some(border_size);
-            container_style.border_color_t = Some(self.theme.colors.border1);
-            container_style.border_color_b = Some(self.theme.colors.border1);
-            container_style.border_color_l = Some(self.theme.colors.border1);
-            container_style.border_color_r = Some(self.theme.colors.border1);
+            container_style.border_size_t = Pixels(border_size);
+            container_style.border_size_b = Pixels(border_size);
+            container_style.border_size_l = Pixels(border_size);
+            container_style.border_size_r = Pixels(border_size);
+            container_style.border_color_t = self.theme.colors.border1;
+            container_style.border_color_b = self.theme.colors.border1;
+            container_style.border_color_l = self.theme.colors.border1;
+            container_style.border_color_r = self.theme.colors.border1;
         }
 
         if let Some(roundness) = self.theme.roundness {
             let radius = roundness.min(width_1_2);
-            container_style.border_radius_tl = Some(radius);
-            container_style.border_radius_tr = Some(radius);
-            container_style.border_radius_bl = Some(radius);
-            container_style.border_radius_br = Some(radius);
+            container_style.border_radius_tl = radius;
+            container_style.border_radius_tr = radius;
+            container_style.border_radius_bl = radius;
+            container_style.border_radius_br = radius;
         }
 
         if self.is_selected() {
-            fill_style.hidden = None;
+            fill_style.visibility = Visibility::Inheirt;
         }
 
         Bin::style_update_batch([(&self.container, container_style), (&self.fill, fill_style)]);

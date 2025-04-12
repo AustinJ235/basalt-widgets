@@ -3,8 +3,10 @@ use std::sync::Arc;
 use std::sync::atomic::{self, AtomicBool};
 
 use basalt::input::{MouseButton, WindowState};
+use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{
-    Bin, BinPosition, BinStyle, Color, TextHoriAlign, TextVertAlign, TextWrap,
+    Bin, BinStyle, Color, Position, TextAttrs, TextBody, TextHoriAlign, TextVertAlign, TextWrap,
+    Visibility,
 };
 use parking_lot::ReentrantMutex;
 
@@ -159,37 +161,42 @@ impl Button {
         let text_height = self.props.text_height.unwrap_or(self.theme.text_height);
 
         let mut container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
-            back_color: Some(self.theme.colors.back3),
-            text: self.props.text.clone(),
-            text_height: Some(text_height),
-            text_color: Some(self.theme.colors.text1a),
-            text_hori_align: Some(TextHoriAlign::Center),
-            text_vert_align: Some(TextVertAlign::Center),
-            text_wrap: Some(TextWrap::None),
-            font_family: Some(self.theme.font_family.clone()),
-            font_weight: Some(self.theme.font_weight),
+            position: Position::Floating,
+            margin_t: Pixels(self.theme.spacing),
+            margin_b: Pixels(self.theme.spacing),
+            margin_l: Pixels(self.theme.spacing),
+            margin_r: Pixels(self.theme.spacing),
+            back_color: self.theme.colors.back3,
+            text: TextBody {
+                hori_align: TextHoriAlign::Center,
+                vert_align: TextVertAlign::Center,
+                text_wrap: TextWrap::None,
+                base_attrs: TextAttrs {
+                    height: Pixels(text_height),
+                    color: self.theme.colors.text1a,
+                    font_family: self.theme.font_family.clone(),
+                    font_weight: self.theme.font_weight,
+                    ..Default::default()
+                },
+                ..TextBody::from(self.props.text.clone())
+            },
             ..Default::default()
         };
 
         match self.props.width {
             Some(width) => {
-                container_style.width = Some(width);
+                container_style.width = Pixels(width);
             },
             None => {
-                container_style.width = Some(0.0);
-                container_style.hidden = Some(true);
+                container_style.width = Pixels(0.0);
+                container_style.visibility = Visibility::Hide;
                 let cb_spacing = self.theme.spacing;
 
                 self.container.on_update_once(move |container, _| {
                     container
                         .style_update(BinStyle {
-                            width: Some((cb_spacing * 2.0) + container.calc_hori_overflow()),
-                            hidden: None,
+                            width: Pixels((cb_spacing * 2.0) + container.calc_hori_overflow()),
+                            visibility: Visibility::Inheirt,
                             ..container.style_copy()
                         })
                         .expect_valid();
@@ -199,29 +206,29 @@ impl Button {
 
         match self.props.height {
             Some(height) => {
-                container_style.height = Some(height);
+                container_style.height = Pixels(height);
             },
             None => {
-                container_style.height = Some((self.theme.spacing * 2.0) + self.theme.spacing);
+                container_style.height = Pixels((self.theme.spacing * 2.0) + self.theme.spacing);
             },
         }
 
         if let Some(border_size) = self.theme.border {
-            container_style.border_size_t = Some(border_size);
-            container_style.border_size_b = Some(border_size);
-            container_style.border_size_l = Some(border_size);
-            container_style.border_size_r = Some(border_size);
-            container_style.border_color_t = Some(self.theme.colors.border1);
-            container_style.border_color_b = Some(self.theme.colors.border1);
-            container_style.border_color_l = Some(self.theme.colors.border1);
-            container_style.border_color_r = Some(self.theme.colors.border1);
+            container_style.border_size_t = Pixels(border_size);
+            container_style.border_size_b = Pixels(border_size);
+            container_style.border_size_l = Pixels(border_size);
+            container_style.border_size_r = Pixels(border_size);
+            container_style.border_color_t = self.theme.colors.border1;
+            container_style.border_color_b = self.theme.colors.border1;
+            container_style.border_color_l = self.theme.colors.border1;
+            container_style.border_color_r = self.theme.colors.border1;
         }
 
         if let Some(border_radius) = self.theme.roundness {
-            container_style.border_radius_tl = Some(border_radius);
-            container_style.border_radius_tr = Some(border_radius);
-            container_style.border_radius_bl = Some(border_radius);
-            container_style.border_radius_br = Some(border_radius);
+            container_style.border_radius_tl = border_radius;
+            container_style.border_radius_tr = border_radius;
+            container_style.border_radius_bl = border_radius;
+            container_style.border_radius_br = border_radius;
         }
 
         self.container.style_update(container_style).expect_valid();
@@ -262,11 +269,11 @@ where
             let mut style = button.style_copy();
 
             if let Some(h_text_clr) = colors.h_text_clr {
-                style.text_color = Some(h_text_clr);
+                style.text.base_attrs.color = h_text_clr;
             }
 
             if let Some(h_back_clr) = colors.h_back_clr {
-                style.back_color = Some(h_back_clr);
+                style.back_color = h_back_clr;
             }
 
             if let Some(h_vert_clr) = colors.h_vert_clr {
@@ -297,11 +304,11 @@ where
             let mut style = button.style_copy();
 
             if let Some(text_clr) = colors.text_clr {
-                style.text_color = Some(text_clr);
+                style.text.base_attrs.color = text_clr;
             }
 
             if let Some(back_clr) = colors.back_clr {
-                style.back_color = Some(back_clr);
+                style.back_color = back_clr;
             }
 
             if let Some(vert_clr) = colors.vert_clr {
@@ -328,11 +335,11 @@ where
             let mut style = button.style_copy();
 
             if let Some(p_text_clr) = colors.p_text_clr {
-                style.text_color = Some(p_text_clr);
+                style.text.base_attrs.color = p_text_clr;
             }
 
             if let Some(p_back_clr) = colors.p_back_clr {
-                style.back_color = Some(p_back_clr);
+                style.back_color = p_back_clr;
             }
 
             if let Some(p_vert_clr) = colors.p_vert_clr {
@@ -364,11 +371,11 @@ where
             let mut style = button.style_copy();
 
             if let Some(h_text_clr) = colors.h_text_clr {
-                style.text_color = Some(h_text_clr);
+                style.text.base_attrs.color = h_text_clr;
             }
 
             if let Some(h_back_clr) = colors.h_back_clr {
-                style.back_color = Some(h_back_clr);
+                style.back_color = h_back_clr;
             }
 
             if let Some(h_vert_clr) = colors.h_vert_clr {
@@ -383,11 +390,11 @@ where
             let mut style = button.style_copy();
 
             if let Some(text_clr) = colors.text_clr {
-                style.text_color = Some(text_clr);
+                style.text.base_attrs.color = text_clr;
             }
 
             if let Some(back_clr) = colors.back_clr {
-                style.back_color = Some(back_clr);
+                style.back_color = back_clr;
             }
 
             if let Some(vert_clr) = colors.vert_clr {

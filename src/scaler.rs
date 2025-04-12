@@ -3,7 +3,8 @@ use std::sync::Arc;
 use std::sync::atomic::{self, AtomicBool};
 
 use basalt::input::{MouseButton, Qwerty, WindowState};
-use basalt::interface::{Bin, BinPosition, BinStyle};
+use basalt::interface::UnitValue::{Percent, Pixels};
+use basalt::interface::{Bin, BinStyle, Position};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
@@ -444,10 +445,10 @@ impl Scaler {
 
         match self.props.orientation {
             ScalerOrientation::Horizontal => {
-                knob_style.pos_from_l_pct = Some(pct);
+                knob_style.pos_from_l = Percent(pct);
             },
             ScalerOrientation::Vertical => {
-                knob_style.pos_from_b_pct = Some(pct);
+                knob_style.pos_from_b = Percent(pct);
             },
         }
 
@@ -569,95 +570,92 @@ impl Scaler {
             * 100.0;
 
         let container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            height: Some(widget_height),
-            width: Some(widget_width),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
+            position: Position::Floating,
+            height: Pixels(widget_height),
+            width: Pixels(widget_width),
+            margin_t: Pixels(self.theme.spacing),
+            margin_b: Pixels(self.theme.spacing),
+            margin_l: Pixels(self.theme.spacing),
+            margin_r: Pixels(self.theme.spacing),
             ..Default::default()
         };
 
         let mut track_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            back_color: Some(self.theme.colors.back3),
-            border_radius_tl: Some(track_size / 2.0),
-            border_radius_tr: Some(track_size / 2.0),
-            border_radius_bl: Some(track_size / 2.0),
-            border_radius_br: Some(track_size / 2.0),
+            back_color: self.theme.colors.back3,
+            border_radius_tl: track_size / 2.0,
+            border_radius_tr: track_size / 2.0,
+            border_radius_bl: track_size / 2.0,
+            border_radius_br: track_size / 2.0,
             ..Default::default()
         };
 
         let mut confine_style = BinStyle {
-            position: Some(BinPosition::Parent),
             ..Default::default()
         };
 
         let mut knob_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            back_color: Some(self.theme.colors.accent1),
-            border_radius_tl: Some(knob_size / 2.0),
-            border_radius_tr: Some(knob_size / 2.0),
-            border_radius_bl: Some(knob_size / 2.0),
-            border_radius_br: Some(knob_size / 2.0),
+            back_color: self.theme.colors.accent1,
+            border_radius_tl: knob_size / 2.0,
+            border_radius_tr: knob_size / 2.0,
+            border_radius_bl: knob_size / 2.0,
+            border_radius_br: knob_size / 2.0,
             ..Default::default()
         };
 
         match self.props.orientation {
             ScalerOrientation::Horizontal => {
-                track_style.pos_from_t = Some(track_space);
-                track_style.pos_from_b = Some(track_space);
-                track_style.pos_from_l = Some(border_size);
-                track_style.pos_from_r = Some(border_size);
+                track_style.pos_from_t = Pixels(track_space);
+                track_style.pos_from_b = Pixels(track_space);
+                track_style.pos_from_l = Pixels(border_size);
+                track_style.pos_from_r = Pixels(border_size);
 
-                confine_style.pos_from_t = Some(0.0);
-                confine_style.pos_from_b = Some(0.0);
-                confine_style.pos_from_l = Some(border_size);
-                confine_style.pos_from_r = Some(widget_height - border_size);
-                confine_style.overflow_x = Some(true);
+                confine_style.pos_from_t = Pixels(0.0);
+                confine_style.pos_from_b = Pixels(0.0);
+                confine_style.pos_from_l = Pixels(border_size);
+                confine_style.pos_from_r = Pixels(widget_height - border_size);
+                confine_style.overflow_x = true;
 
-                knob_style.pos_from_t = Some(border_size);
-                knob_style.pos_from_b = Some(border_size);
-                knob_style.pos_from_l_pct = Some(pct);
-                knob_style.width = Some(knob_size);
+                knob_style.pos_from_t = Pixels(border_size);
+                knob_style.pos_from_b = Pixels(border_size);
+                knob_style.pos_from_l = Percent(pct);
+                knob_style.width = Pixels(knob_size);
             },
             ScalerOrientation::Vertical => {
-                track_style.pos_from_t = Some(border_size);
-                track_style.pos_from_b = Some(border_size);
-                track_style.pos_from_l = Some(track_space);
-                track_style.pos_from_r = Some(track_space);
+                track_style.pos_from_t = Pixels(border_size);
+                track_style.pos_from_b = Pixels(border_size);
+                track_style.pos_from_l = Pixels(track_space);
+                track_style.pos_from_r = Pixels(track_space);
 
-                confine_style.pos_from_t = Some(widget_width - border_size);
-                confine_style.pos_from_b = Some(border_size);
-                confine_style.pos_from_l = Some(0.0);
-                confine_style.pos_from_r = Some(0.0);
-                confine_style.overflow_y = Some(true);
+                confine_style.pos_from_t = Pixels(widget_width - border_size);
+                confine_style.pos_from_b = Pixels(border_size);
+                confine_style.pos_from_l = Pixels(0.0);
+                confine_style.pos_from_r = Pixels(0.0);
+                confine_style.overflow_y = true;
 
-                knob_style.pos_from_l = Some(border_size);
-                knob_style.pos_from_r = Some(border_size);
-                knob_style.pos_from_b_pct = Some(pct);
-                knob_style.height = Some(knob_size);
+                knob_style.pos_from_l = Pixels(border_size);
+                knob_style.pos_from_r = Pixels(border_size);
+                knob_style.pos_from_b = Percent(pct);
+                knob_style.height = Pixels(knob_size);
             },
         }
 
         if let Some(border_size) = self.theme.border {
-            track_style.border_size_t = Some(border_size);
-            track_style.border_size_b = Some(border_size);
-            track_style.border_size_l = Some(border_size);
-            track_style.border_size_r = Some(border_size);
-            track_style.border_color_t = Some(self.theme.colors.border3);
-            track_style.border_color_b = Some(self.theme.colors.border3);
-            track_style.border_color_l = Some(self.theme.colors.border3);
-            track_style.border_color_r = Some(self.theme.colors.border3);
-            knob_style.border_size_t = Some(border_size);
-            knob_style.border_size_b = Some(border_size);
-            knob_style.border_size_l = Some(border_size);
-            knob_style.border_size_r = Some(border_size);
-            knob_style.border_color_t = Some(self.theme.colors.border3);
-            knob_style.border_color_b = Some(self.theme.colors.border3);
-            knob_style.border_color_l = Some(self.theme.colors.border3);
-            knob_style.border_color_r = Some(self.theme.colors.border3);
+            track_style.border_size_t = Pixels(border_size);
+            track_style.border_size_b = Pixels(border_size);
+            track_style.border_size_l = Pixels(border_size);
+            track_style.border_size_r = Pixels(border_size);
+            track_style.border_color_t = self.theme.colors.border3;
+            track_style.border_color_b = self.theme.colors.border3;
+            track_style.border_color_l = self.theme.colors.border3;
+            track_style.border_color_r = self.theme.colors.border3;
+            knob_style.border_size_t = Pixels(border_size);
+            knob_style.border_size_b = Pixels(border_size);
+            knob_style.border_size_l = Pixels(border_size);
+            knob_style.border_size_r = Pixels(border_size);
+            knob_style.border_color_t = self.theme.colors.border3;
+            knob_style.border_color_b = self.theme.colors.border3;
+            knob_style.border_color_l = self.theme.colors.border3;
+            knob_style.border_color_r = self.theme.colors.border3;
         }
 
         Bin::style_update_batch([

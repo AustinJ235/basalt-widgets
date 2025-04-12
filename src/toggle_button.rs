@@ -3,7 +3,11 @@ use std::sync::Arc;
 use std::sync::atomic::{self, AtomicBool};
 
 use basalt::input::MouseButton;
-use basalt::interface::{Bin, BinPosition, BinStyle, TextHoriAlign, TextVertAlign, TextWrap};
+use basalt::interface::UnitValue::Pixels;
+use basalt::interface::{
+    Bin, BinStyle, Position, TextAttrs, TextBody, TextHoriAlign, TextVertAlign, TextWrap,
+    Visibility,
+};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
@@ -140,8 +144,8 @@ where
 
             if !cb_button_pressed.load(atomic::Ordering::SeqCst) && !cb_toggle_button.get() {
                 let mut style = cb_toggle_button.container.style_copy();
-                style.back_color = Some(cb_toggle_button.theme.colors.accent1);
-                style.text_color = Some(cb_toggle_button.theme.colors.text1b);
+                style.back_color = cb_toggle_button.theme.colors.accent1;
+                style.text.base_attrs.color = cb_toggle_button.theme.colors.text1b;
 
                 cb_toggle_button
                     .container
@@ -161,8 +165,8 @@ where
 
             if !cb_button_pressed.load(atomic::Ordering::SeqCst) && !cb_toggle_button.get() {
                 let mut style = cb_toggle_button.container.style_copy();
-                style.back_color = Some(cb_toggle_button.theme.colors.back3);
-                style.text_color = Some(cb_toggle_button.theme.colors.text1a);
+                style.back_color = cb_toggle_button.theme.colors.back3;
+                style.text.base_attrs.color = cb_toggle_button.theme.colors.text1a;
 
                 cb_toggle_button
                     .container
@@ -197,11 +201,11 @@ where
                     let mut style = cb_toggle_button.container.style_copy();
 
                     if cb_cursor_inside.load(atomic::Ordering::SeqCst) {
-                        style.back_color = Some(cb_toggle_button.theme.colors.accent1);
-                        style.text_color = Some(cb_toggle_button.theme.colors.text1b);
+                        style.back_color = cb_toggle_button.theme.colors.accent1;
+                        style.text.base_attrs.color = cb_toggle_button.theme.colors.text1b;
                     } else {
-                        style.back_color = Some(cb_toggle_button.theme.colors.back3);
-                        style.text_color = Some(cb_toggle_button.theme.colors.text1a);
+                        style.back_color = cb_toggle_button.theme.colors.back3;
+                        style.text.base_attrs.color = cb_toggle_button.theme.colors.text1a;
                     }
 
                     cb_toggle_button
@@ -238,10 +242,10 @@ impl ToggleButton {
         *state.enabled.borrow_mut() = enabled;
 
         let mut style = self.container.style_copy();
-        style.back_color = Some(self.theme.colors.accent2);
-        style.text_color = Some(self.theme.colors.text1b);
+        style.back_color = self.theme.colors.accent2;
+        style.text.base_attrs.color = self.theme.colors.text1b;
 
-        style.text = if enabled {
+        style.text.spans[0].text = if enabled {
             self.props.enabled_text.clone()
         } else {
             self.props.disabled_text.clone()
@@ -290,26 +294,33 @@ impl ToggleButton {
         let text_height = self.props.text_height.unwrap_or(self.theme.text_height);
 
         let mut container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
-            text_height: Some(text_height),
-            text_hori_align: Some(TextHoriAlign::Center),
-            text_vert_align: Some(TextVertAlign::Center),
-            text_wrap: Some(TextWrap::None),
-            font_family: Some(self.theme.font_family.clone()),
-            font_weight: Some(self.theme.font_weight),
+            position: Position::Floating,
+            margin_t: Pixels(self.theme.spacing),
+            margin_b: Pixels(self.theme.spacing),
+            margin_l: Pixels(self.theme.spacing),
+            margin_r: Pixels(self.theme.spacing),
+            text: TextBody {
+                spans: vec![Default::default()],
+                hori_align: TextHoriAlign::Center,
+                vert_align: TextVertAlign::Center,
+                text_wrap: TextWrap::None,
+                base_attrs: TextAttrs {
+                    height: Pixels(text_height),
+                    font_family: self.theme.font_family.clone(),
+                    font_weight: self.theme.font_weight,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
             ..Default::default()
         };
 
         if *self.state.lock().enabled.borrow() {
-            container_style.back_color = Some(self.theme.colors.accent2);
-            container_style.text_color = Some(self.theme.colors.text1b);
+            container_style.back_color = self.theme.colors.accent2;
+            container_style.text.base_attrs.color = self.theme.colors.text1b;
         } else {
-            container_style.back_color = Some(self.theme.colors.back3);
-            container_style.text_color = Some(self.theme.colors.text1a);
+            container_style.back_color = self.theme.colors.back3;
+            container_style.text.base_attrs.color = self.theme.colors.text1a;
         }
 
         let initial_text = if self.props.enabled {
@@ -320,11 +331,11 @@ impl ToggleButton {
 
         match self.props.width {
             Some(width) => {
-                container_style.width = Some(width);
-                container_style.text = initial_text;
+                container_style.width = Pixels(width);
+                container_style.text.spans[0].text = initial_text;
             },
             None => {
-                container_style.text = (0..self
+                container_style.text.spans[0].text = (0..self
                     .props
                     .disabled_text
                     .len()
@@ -332,48 +343,47 @@ impl ToggleButton {
                     .map(|_| 'X')
                     .collect();
 
-                container_style.width = Some(0.0);
-                container_style.hidden = Some(true);
+                container_style.width = Pixels(0.0);
+                container_style.visibility = Visibility::Hide;
                 let cb_spacing = self.theme.spacing;
 
                 self.container.on_update_once(move |container, _| {
-                    container
-                        .style_update(BinStyle {
-                            width: Some((cb_spacing * 2.0) + container.calc_hori_overflow()),
-                            text: initial_text.clone(),
-                            hidden: None,
-                            ..container.style_copy()
-                        })
-                        .expect_valid();
+                    let width = Pixels((cb_spacing * 2.0) + container.calc_hori_overflow());
+
+                    container.style_modify(|style| {
+                        style.visibility = Visibility::Inheirt;
+                        style.width = width;
+                        style.text.spans[0].text = initial_text.clone();
+                    });
                 });
             },
         }
 
         match self.props.height {
             Some(height) => {
-                container_style.height = Some(height);
+                container_style.height = Pixels(height);
             },
             None => {
-                container_style.height = Some((self.theme.spacing * 2.0) + self.theme.spacing);
+                container_style.height = Pixels((self.theme.spacing * 2.0) + self.theme.spacing);
             },
         }
 
         if let Some(border_size) = self.theme.border {
-            container_style.border_size_t = Some(border_size);
-            container_style.border_size_b = Some(border_size);
-            container_style.border_size_l = Some(border_size);
-            container_style.border_size_r = Some(border_size);
-            container_style.border_color_t = Some(self.theme.colors.border1);
-            container_style.border_color_b = Some(self.theme.colors.border1);
-            container_style.border_color_l = Some(self.theme.colors.border1);
-            container_style.border_color_r = Some(self.theme.colors.border1);
+            container_style.border_size_t = Pixels(border_size);
+            container_style.border_size_b = Pixels(border_size);
+            container_style.border_size_l = Pixels(border_size);
+            container_style.border_size_r = Pixels(border_size);
+            container_style.border_color_t = self.theme.colors.border1;
+            container_style.border_color_b = self.theme.colors.border1;
+            container_style.border_color_l = self.theme.colors.border1;
+            container_style.border_color_r = self.theme.colors.border1;
         }
 
         if let Some(border_radius) = self.theme.roundness {
-            container_style.border_radius_tl = Some(border_radius);
-            container_style.border_radius_tr = Some(border_radius);
-            container_style.border_radius_bl = Some(border_radius);
-            container_style.border_radius_br = Some(border_radius);
+            container_style.border_radius_tl = border_radius;
+            container_style.border_radius_tr = border_radius;
+            container_style.border_radius_bl = border_radius;
+            container_style.border_radius_br = border_radius;
         }
 
         self.container.style_update(container_style).expect_valid();

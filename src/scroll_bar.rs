@@ -5,7 +5,8 @@ use std::sync::atomic::{self, AtomicBool};
 use std::time::Duration;
 
 use basalt::input::MouseButton;
-use basalt::interface::{Bin, BinID, BinPosition, BinStyle, BinVert, Color};
+use basalt::interface::UnitValue::{Percent, Pixels};
+use basalt::interface::{Bin, BinID, BinStyle, BinVert, Color};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
@@ -191,8 +192,8 @@ where
                 .container_bin()
                 .style_inspect(|style| {
                     match self.props.axis {
-                        ScrollAxis::X => style.scroll_x.unwrap_or(0.0),
-                        ScrollAxis::Y => style.scroll_y.unwrap_or(0.0),
+                        ScrollAxis::X => style.scroll_x,
+                        ScrollAxis::Y => style.scroll_y,
                     }
                 })
         });
@@ -816,25 +817,21 @@ impl ScrollBar {
 
         match self.props.axis {
             ScrollAxis::X => {
-                if target_style.scroll_x.is_none()
-                    || target_style.scroll_x.unwrap() != target_state.scroll
-                {
-                    target_style.scroll_x = Some(target_state.scroll);
+                if target_style.scroll_x != target_state.scroll {
+                    target_style.scroll_x = target_state.scroll;
                     target_style_update = true;
 
-                    bar_style.pos_from_l_pct = Some(bar_offset_pct);
-                    bar_style.width_pct = Some(bar_size_pct);
+                    bar_style.pos_from_l = Percent(bar_offset_pct);
+                    bar_style.width = Percent(bar_size_pct);
                 }
             },
             ScrollAxis::Y => {
-                if target_style.scroll_y.is_none()
-                    || target_style.scroll_y.unwrap() != target_state.scroll
-                {
-                    target_style.scroll_y = Some(target_state.scroll);
+                if target_style.scroll_y != target_state.scroll {
+                    target_style.scroll_y = target_state.scroll;
                     target_style_update = true;
 
-                    bar_style.pos_from_t_pct = Some(bar_offset_pct);
-                    bar_style.height_pct = Some(bar_size_pct);
+                    bar_style.pos_from_t = Percent(bar_offset_pct);
+                    bar_style.height = Percent(bar_size_pct);
                 }
             },
         }
@@ -852,125 +849,120 @@ impl ScrollBar {
         let border_size = self.theme.border.unwrap_or(0.0);
 
         let mut container_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            back_color: Some(self.theme.colors.back2),
+            back_color: self.theme.colors.back2,
             ..Default::default()
         };
 
         let mut upright_style = BinStyle {
-            position: Some(BinPosition::Parent),
             ..Default::default()
         };
 
         let mut downleft_style = BinStyle {
-            position: Some(BinPosition::Parent),
             ..Default::default()
         };
 
         let mut confine_style = BinStyle {
-            position: Some(BinPosition::Parent),
             ..Default::default()
         };
 
         let mut bar_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            back_color: Some(self.theme.colors.accent1),
+            back_color: self.theme.colors.accent1,
             ..Default::default()
         };
 
         match self.props.axis {
             ScrollAxis::X => {
-                container_style.pos_from_b = Some(0.0);
-                container_style.pos_from_l = Some(0.0);
-                container_style.pos_from_r = Some(0.0);
-                container_style.height = Some(size);
+                container_style.pos_from_b = Pixels(0.0);
+                container_style.pos_from_l = Pixels(0.0);
+                container_style.pos_from_r = Pixels(0.0);
+                container_style.height = Pixels(size);
 
-                upright_style.pos_from_t = Some(0.0);
-                upright_style.pos_from_b = Some(0.0);
-                upright_style.pos_from_r = Some(0.0);
-                upright_style.width = Some(size);
+                upright_style.pos_from_t = Pixels(0.0);
+                upright_style.pos_from_b = Pixels(0.0);
+                upright_style.pos_from_r = Pixels(0.0);
+                upright_style.width = Pixels(size);
                 upright_style.custom_verts =
                     right_symbol_verts(size, spacing, self.theme.colors.border1);
 
-                downleft_style.pos_from_t = Some(0.0);
-                downleft_style.pos_from_b = Some(0.0);
-                downleft_style.pos_from_l = Some(0.0);
-                downleft_style.width = Some(size);
+                downleft_style.pos_from_t = Pixels(0.0);
+                downleft_style.pos_from_b = Pixels(0.0);
+                downleft_style.pos_from_l = Pixels(0.0);
+                downleft_style.width = Pixels(size);
                 downleft_style.custom_verts =
                     left_symbol_verts(size, spacing, self.theme.colors.border1);
 
-                confine_style.pos_from_t = Some(spacing);
-                confine_style.pos_from_b = Some(spacing);
-                confine_style.pos_from_l = Some(size + border_size);
-                confine_style.pos_from_r = Some(size + border_size);
-                confine_style.overflow_x = Some(true);
+                confine_style.pos_from_t = Pixels(spacing);
+                confine_style.pos_from_b = Pixels(spacing);
+                confine_style.pos_from_l = Pixels(size + border_size);
+                confine_style.pos_from_r = Pixels(size + border_size);
+                confine_style.overflow_x = true;
 
-                bar_style.pos_from_t = Some(0.0);
-                bar_style.pos_from_b = Some(0.0);
-                bar_style.pos_from_l_pct = Some(0.0);
-                bar_style.width_pct = Some(100.0);
+                bar_style.pos_from_t = Pixels(0.0);
+                bar_style.pos_from_b = Pixels(0.0);
+                bar_style.pos_from_l = Percent(0.0);
+                bar_style.width = Percent(100.0);
             },
             ScrollAxis::Y => {
-                container_style.pos_from_t = Some(0.0);
-                container_style.pos_from_b = Some(0.0);
-                container_style.pos_from_r = Some(0.0);
-                container_style.width = Some(size);
+                container_style.pos_from_t = Pixels(0.0);
+                container_style.pos_from_b = Pixels(0.0);
+                container_style.pos_from_r = Pixels(0.0);
+                container_style.width = Pixels(size);
 
-                upright_style.pos_from_t = Some(0.0);
-                upright_style.pos_from_l = Some(0.0);
-                upright_style.pos_from_r = Some(0.0);
-                upright_style.height = Some(size);
+                upright_style.pos_from_t = Pixels(0.0);
+                upright_style.pos_from_l = Pixels(0.0);
+                upright_style.pos_from_r = Pixels(0.0);
+                upright_style.height = Pixels(size);
                 upright_style.custom_verts =
                     up_symbol_verts(size, spacing, self.theme.colors.border1);
 
-                downleft_style.pos_from_b = Some(0.0);
-                downleft_style.pos_from_l = Some(0.0);
-                downleft_style.pos_from_r = Some(0.0);
-                downleft_style.height = Some(size);
+                downleft_style.pos_from_b = Pixels(0.0);
+                downleft_style.pos_from_l = Pixels(0.0);
+                downleft_style.pos_from_r = Pixels(0.0);
+                downleft_style.height = Pixels(size);
                 downleft_style.custom_verts =
                     down_symbol_verts(size, spacing, self.theme.colors.border1);
 
-                confine_style.pos_from_t = Some(size + border_size);
-                confine_style.pos_from_b = Some(size + border_size);
-                confine_style.pos_from_l = Some(spacing);
-                confine_style.pos_from_r = Some(spacing);
-                confine_style.overflow_y = Some(true);
+                confine_style.pos_from_t = Pixels(size + border_size);
+                confine_style.pos_from_b = Pixels(size + border_size);
+                confine_style.pos_from_l = Pixels(spacing);
+                confine_style.pos_from_r = Pixels(spacing);
+                confine_style.overflow_y = true;
 
-                bar_style.pos_from_t_pct = Some(0.0);
-                bar_style.pos_from_l = Some(0.0);
-                bar_style.pos_from_r = Some(0.0);
-                bar_style.height_pct = Some(100.0);
+                bar_style.pos_from_t = Percent(0.0);
+                bar_style.pos_from_l = Pixels(0.0);
+                bar_style.pos_from_r = Pixels(0.0);
+                bar_style.height = Percent(100.0);
             },
         }
 
         if let Some(border_size) = self.theme.border {
-            bar_style.border_size_t = Some(border_size);
-            bar_style.border_size_b = Some(border_size);
-            bar_style.border_size_l = Some(border_size);
-            bar_style.border_size_r = Some(border_size);
-            bar_style.border_color_t = Some(self.theme.colors.border3);
-            bar_style.border_color_b = Some(self.theme.colors.border3);
-            bar_style.border_color_l = Some(self.theme.colors.border3);
-            bar_style.border_color_r = Some(self.theme.colors.border3);
+            bar_style.border_size_t = Pixels(border_size);
+            bar_style.border_size_b = Pixels(border_size);
+            bar_style.border_size_l = Pixels(border_size);
+            bar_style.border_size_r = Pixels(border_size);
+            bar_style.border_color_t = self.theme.colors.border3;
+            bar_style.border_color_b = self.theme.colors.border3;
+            bar_style.border_color_l = self.theme.colors.border3;
+            bar_style.border_color_r = self.theme.colors.border3;
 
             match self.props.axis {
                 ScrollAxis::X => {
-                    container_style.border_size_t = Some(border_size);
-                    container_style.border_color_t = Some(self.theme.colors.border1);
+                    container_style.border_size_t = Pixels(border_size);
+                    container_style.border_color_t = self.theme.colors.border1;
                 },
                 ScrollAxis::Y => {
-                    container_style.border_size_l = Some(border_size);
-                    container_style.border_color_l = Some(self.theme.colors.border1);
+                    container_style.border_size_l = Pixels(border_size);
+                    container_style.border_color_l = self.theme.colors.border1;
                 },
             }
         }
 
         if self.theme.roundness.is_some() {
             let bar_size_1_2 = (size - (spacing * 2.0)) / 2.0;
-            bar_style.border_radius_tl = Some(bar_size_1_2);
-            bar_style.border_radius_tr = Some(bar_size_1_2);
-            bar_style.border_radius_bl = Some(bar_size_1_2);
-            bar_style.border_radius_br = Some(bar_size_1_2);
+            bar_style.border_radius_tl = bar_size_1_2;
+            bar_style.border_radius_tr = bar_size_1_2;
+            bar_style.border_radius_bl = bar_size_1_2;
+            bar_style.border_radius_br = bar_size_1_2;
         }
 
         Bin::style_update_batch([
