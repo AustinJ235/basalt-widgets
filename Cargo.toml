@@ -5,5 +5,5 @@ edition = "2024"
 publish = false
 
 [dependencies]
-basalt = { git = "https://github.com/AustinJ235/basalt.git", rev = "011608839051d8e73347db67ce3b00814f2a7f36" }
+basalt = { git = "https://github.com/AustinJ235/basalt.git", rev = "6b7b24c8ee50a702dc71946e453f7fe9876555d5" }
 parking_lot = "0.12"

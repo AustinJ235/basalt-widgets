@@ -2,7 +2,8 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use basalt::input::MouseButton;
-use basalt::interface::{Bin, BinPosition, BinStyle};
+use basalt::interface::UnitValue::{Pixels, Undefined};
+use basalt::interface::{Bin, BinStyle, Position};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
@@ -153,15 +154,15 @@ impl SwitchButton {
                 (
                     &self.container,
                     BinStyle {
-                        back_color: Some(self.theme.colors.accent1),
+                        back_color: self.theme.colors.accent1,
                         ..self.container.style_copy()
                     },
                 ),
                 (
                     &self.knob,
                     BinStyle {
-                        pos_from_r: Some(widget_height * 0.1),
-                        pos_from_l: None,
+                        pos_from_r: Pixels(widget_height * 0.1),
+                        pos_from_l: Undefined,
                         ..self.knob.style_copy()
                     },
                 ),
@@ -171,15 +172,15 @@ impl SwitchButton {
                 (
                     &self.container,
                     BinStyle {
-                        back_color: Some(self.theme.colors.back3),
+                        back_color: self.theme.colors.back3,
                         ..self.container.style_copy()
                     },
                 ),
                 (
                     &self.knob,
                     BinStyle {
-                        pos_from_l: Some(widget_height * 0.1),
-                        pos_from_r: None,
+                        pos_from_l: Pixels(widget_height * 0.1),
+                        pos_from_r: Undefined,
                         ..self.knob.style_copy()
                     },
                 ),
@@ -237,61 +238,60 @@ impl SwitchButton {
         let enabled = *self.state.lock().enabled.borrow();
 
         let mut container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            height: Some(widget_height),
-            width: Some(widget_width),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
-            border_radius_tl: Some(widget_height / 2.0),
-            border_radius_tr: Some(widget_height / 2.0),
-            border_radius_bl: Some(widget_height / 2.0),
-            border_radius_br: Some(widget_height / 2.0),
+            position: Position::Floating,
+            height: Pixels(widget_height),
+            width: Pixels(widget_width),
+            margin_t: Pixels(self.theme.spacing),
+            margin_b: Pixels(self.theme.spacing),
+            margin_l: Pixels(self.theme.spacing),
+            margin_r: Pixels(self.theme.spacing),
+            border_radius_tl: widget_height / 2.0,
+            border_radius_tr: widget_height / 2.0,
+            border_radius_bl: widget_height / 2.0,
+            border_radius_br: widget_height / 2.0,
             ..Default::default()
         };
 
         let knob_size = widget_height - (widget_height * 0.2);
 
         let mut knob_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            pos_from_t: Some(widget_height * 0.1),
-            pos_from_b: Some(widget_height * 0.1),
-            width: Some(knob_size),
-            back_color: Some(self.theme.colors.back1),
-            border_radius_tl: Some(knob_size / 2.0),
-            border_radius_tr: Some(knob_size / 2.0),
-            border_radius_bl: Some(knob_size / 2.0),
-            border_radius_br: Some(knob_size / 2.0),
+            pos_from_t: Pixels(widget_height * 0.1),
+            pos_from_b: Pixels(widget_height * 0.1),
+            width: Pixels(knob_size),
+            back_color: self.theme.colors.back1,
+            border_radius_tl: knob_size / 2.0,
+            border_radius_tr: knob_size / 2.0,
+            border_radius_bl: knob_size / 2.0,
+            border_radius_br: knob_size / 2.0,
             ..Default::default()
         };
 
         if enabled {
-            container_style.back_color = Some(self.theme.colors.accent1);
-            knob_style.pos_from_r = Some(widget_height * 0.1);
+            container_style.back_color = self.theme.colors.accent1;
+            knob_style.pos_from_r = Pixels(widget_height * 0.1);
         } else {
-            container_style.back_color = Some(self.theme.colors.back3);
-            knob_style.pos_from_l = Some(widget_height * 0.1);
+            container_style.back_color = self.theme.colors.back3;
+            knob_style.pos_from_l = Pixels(widget_height * 0.1);
         }
 
         if let Some(border_size) = self.theme.border {
-            container_style.border_size_t = Some(border_size);
-            container_style.border_size_b = Some(border_size);
-            container_style.border_size_l = Some(border_size);
-            container_style.border_size_r = Some(border_size);
-            container_style.border_color_t = Some(self.theme.colors.border1);
-            container_style.border_color_b = Some(self.theme.colors.border1);
-            container_style.border_color_l = Some(self.theme.colors.border1);
-            container_style.border_color_r = Some(self.theme.colors.border1);
+            container_style.border_size_t = Pixels(border_size);
+            container_style.border_size_b = Pixels(border_size);
+            container_style.border_size_l = Pixels(border_size);
+            container_style.border_size_r = Pixels(border_size);
+            container_style.border_color_t = self.theme.colors.border1;
+            container_style.border_color_b = self.theme.colors.border1;
+            container_style.border_color_l = self.theme.colors.border1;
+            container_style.border_color_r = self.theme.colors.border1;
 
-            knob_style.border_size_t = Some(border_size);
-            knob_style.border_size_b = Some(border_size);
-            knob_style.border_size_l = Some(border_size);
-            knob_style.border_size_r = Some(border_size);
-            knob_style.border_color_t = Some(self.theme.colors.border3);
-            knob_style.border_color_b = Some(self.theme.colors.border3);
-            knob_style.border_color_l = Some(self.theme.colors.border3);
-            knob_style.border_color_r = Some(self.theme.colors.border3);
+            knob_style.border_size_t = Pixels(border_size);
+            knob_style.border_size_b = Pixels(border_size);
+            knob_style.border_size_l = Pixels(border_size);
+            knob_style.border_size_r = Pixels(border_size);
+            knob_style.border_color_t = self.theme.colors.border3;
+            knob_style.border_color_b = self.theme.colors.border3;
+            knob_style.border_color_l = self.theme.colors.border3;
+            knob_style.border_color_r = self.theme.colors.border3;
         }
 
         Bin::style_update_batch([(&self.container, container_style), (&self.knob, knob_style)]);
