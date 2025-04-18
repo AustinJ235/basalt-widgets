@@ -6,12 +6,11 @@ use basalt::input::{MouseButton, WindowState};
 use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{
     Bin, BinStyle, Color, Position, TextAttrs, TextBody, TextHoriAlign, TextVertAlign, TextWrap,
-    Visibility,
 };
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`Button`]
 pub struct ButtonBuilder<'a, C> {
@@ -23,19 +22,31 @@ pub struct ButtonBuilder<'a, C> {
 #[derive(Default)]
 struct Properties {
     text: String,
-    width: Option<f32>,
-    height: Option<f32>,
-    text_height: Option<f32>,
+    placement: WidgetPlacement,
+}
+
+impl Properties {
+    fn new(placement: WidgetPlacement) -> Self {
+        Self {
+            text: String::new(),
+            placement,
+        }
+    }
 }
 
 impl<'a, C> ButtonBuilder<'a, C>
 where
     C: WidgetContainer,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>) -> Self {
         Self {
+            props: Properties::new(
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| Button::default_placement(&builder.theme)),
+            ),
             widget: builder,
-            props: Default::default(),
             on_press: Vec::new(),
         }
     }
@@ -46,24 +57,6 @@ where
         T: Into<String>,
     {
         self.props.text = text.into();
-        self
-    }
-
-    /// **Temporary**
-    pub fn width(mut self, width: f32) -> Self {
-        self.props.width = Some(width);
-        self
-    }
-
-    /// **Temporary**
-    pub fn height(mut self, height: f32) -> Self {
-        self.props.height = Some(height);
-        self
-    }
-
-    /// **Temporary**
-    pub fn text_height(mut self, text_height: f32) -> Self {
-        self.props.text_height = Some(text_height);
         self
     }
 
@@ -143,6 +136,22 @@ struct State {
 }
 
 impl Button {
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        let height = theme.spacing + theme.base_size;
+        let width = height * 2.0;
+
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(width),
+            height: Pixels(height),
+            ..Default::default()
+        }
+    }
+
     /// Add a callback to be called when the [`Button`] is pressed.
     ///
     /// **Panics**: When adding a callback within the callback.
@@ -158,21 +167,14 @@ impl Button {
     }
 
     fn style_update(&self) {
-        let text_height = self.props.text_height.unwrap_or(self.theme.text_height);
-
         let mut container_style = BinStyle {
-            position: Position::Floating,
-            margin_t: Pixels(self.theme.spacing),
-            margin_b: Pixels(self.theme.spacing),
-            margin_l: Pixels(self.theme.spacing),
-            margin_r: Pixels(self.theme.spacing),
             back_color: self.theme.colors.back3,
             text_body: TextBody {
                 hori_align: TextHoriAlign::Center,
                 vert_align: TextVertAlign::Center,
                 text_wrap: TextWrap::None,
                 base_attrs: TextAttrs {
-                    height: Pixels(text_height),
+                    height: Pixels(self.theme.text_height),
                     color: self.theme.colors.text1a,
                     font_family: self.theme.font_family.clone(),
                     font_weight: self.theme.font_weight,
@@ -180,38 +182,8 @@ impl Button {
                 },
                 ..TextBody::from(self.props.text.clone())
             },
-            ..Default::default()
+            ..self.props.placement.clone().into_style()
         };
-
-        match self.props.width {
-            Some(width) => {
-                container_style.width = Pixels(width);
-            },
-            None => {
-                container_style.width = Pixels(0.0);
-                container_style.visibility = Visibility::Hide;
-                let cb_spacing = self.theme.spacing;
-
-                self.container.on_update_once(move |container, _| {
-                    container
-                        .style_update(BinStyle {
-                            width: Pixels((cb_spacing * 2.0) + container.calc_hori_overflow()),
-                            visibility: Visibility::Inheirt,
-                            ..container.style_copy()
-                        })
-                        .expect_valid();
-                });
-            },
-        }
-
-        match self.props.height {
-            Some(height) => {
-                container_style.height = Pixels(height);
-            },
-            None => {
-                container_style.height = Pixels((self.theme.spacing * 2.0) + self.theme.spacing);
-            },
-        }
 
         if let Some(border_size) = self.theme.border {
             container_style.border_size_t = Pixels(border_size);

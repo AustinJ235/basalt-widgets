@@ -10,12 +10,13 @@ pub use crate::select::SelectBuilder;
 pub use crate::spin_button::SpinButtonBuilder;
 pub use crate::switch_button::SwitchButtonBuilder;
 pub use crate::toggle_button::ToggleButtonBuilder;
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 /// General builder for widgets.
 pub struct WidgetBuilder<'a, C> {
     pub(crate) container: &'a C,
     pub(crate) theme: Theme,
+    pub(crate) placement: Option<WidgetPlacement>,
 }
 
 impl<'a, C> From<&'a C> for WidgetBuilder<'a, C>
@@ -26,6 +27,7 @@ where
         Self {
             theme: container.default_theme(),
             container,
+            placement: None,
         }
     }
 }
@@ -34,11 +36,17 @@ impl<'a, C> WidgetBuilder<'a, C>
 where
     C: WidgetContainer,
 {
-    /// Specifiy a theme to be used.
+    /// Specify a theme to be used.
     ///
     /// **Note**: When not used the theme will be Basalt's default light theme.
     pub fn with_theme(mut self, theme: Theme) -> Self {
         self.theme = theme;
+        self
+    }
+
+    /// Specify how the widget should be placed.
+    pub fn with_placement(mut self, placement: WidgetPlacement) -> Self {
+        self.placement = Some(placement);
         self
     }
 

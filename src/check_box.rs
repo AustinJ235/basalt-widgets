@@ -7,7 +7,7 @@ use basalt::interface::{Bin, BinStyle, BinVert, Color, Position, Visibility};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`CheckBox`]
 pub struct CheckBoxBuilder<'a, C, T> {
@@ -19,6 +19,16 @@ pub struct CheckBoxBuilder<'a, C, T> {
 
 struct Properties<T> {
     value: T,
+    placement: WidgetPlacement,
+}
+
+impl<T> Properties<T> {
+    fn new(value: T, placement: WidgetPlacement) -> Self {
+        Self {
+            value,
+            placement,
+        }
+    }
 }
 
 impl<'a, C, T> CheckBoxBuilder<'a, C, T>
@@ -26,12 +36,16 @@ where
     C: WidgetContainer,
     T: Send + Sync + 'static,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>, value: T) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>, value: T) -> Self {
         Self {
-            widget: builder,
-            props: Properties {
+            props: Properties::new(
                 value,
-            },
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| CheckBox::<()>::default_placement(&builder.theme)),
+            ),
+            widget: builder,
             selected: false,
             on_change: Vec::new(),
         }
@@ -195,6 +209,19 @@ impl<T> CheckBox<T> {
             for on_change in on_change_cbs.iter_mut() {
                 on_change(self, selected);
             }
+        }
+    }
+
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(theme.base_size),
+            height: Pixels(theme.base_size),
+            ..Default::default()
         }
     }
 
