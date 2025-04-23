@@ -197,10 +197,10 @@ impl Button {
         }
 
         if let Some(border_radius) = self.theme.roundness {
-            container_style.border_radius_tl = border_radius;
-            container_style.border_radius_tr = border_radius;
-            container_style.border_radius_bl = border_radius;
-            container_style.border_radius_br = border_radius;
+            container_style.border_radius_tl = Pixels(border_radius);
+            container_style.border_radius_tr = Pixels(border_radius);
+            container_style.border_radius_bl = Pixels(border_radius);
+            container_style.border_radius_br = Pixels(border_radius);
         }
 
         self.container.style_update(container_style).expect_valid();
@@ -249,10 +249,11 @@ where
             }
 
             if let Some(h_vert_clr) = colors.h_vert_clr {
-                style
-                    .custom_verts
-                    .iter_mut()
-                    .for_each(|vertex| vertex.color = h_vert_clr);
+                style.user_vertexes.iter_mut().for_each(|(_, vertexes)| {
+                    vertexes
+                        .iter_mut()
+                        .for_each(|vertex| vertex.color = h_vert_clr)
+                });
             }
 
             button.style_update(style).expect_valid();
@@ -284,10 +285,11 @@ where
             }
 
             if let Some(vert_clr) = colors.vert_clr {
-                style
-                    .custom_verts
-                    .iter_mut()
-                    .for_each(|vertex| vertex.color = vert_clr);
+                style.user_vertexes.iter_mut().for_each(|(_, vertexes)| {
+                    vertexes
+                        .iter_mut()
+                        .for_each(|vertex| vertex.color = vert_clr)
+                });
             }
 
             button.style_update(style).expect_valid();
@@ -315,10 +317,11 @@ where
             }
 
             if let Some(p_vert_clr) = colors.p_vert_clr {
-                style
-                    .custom_verts
-                    .iter_mut()
-                    .for_each(|vertex| vertex.color = p_vert_clr);
+                style.user_vertexes.iter_mut().for_each(|(_, vertexes)| {
+                    vertexes
+                        .iter_mut()
+                        .for_each(|vertex| vertex.color = p_vert_clr)
+                });
             }
 
             button.style_update(style).expect_valid();
@@ -351,10 +354,11 @@ where
             }
 
             if let Some(h_vert_clr) = colors.h_vert_clr {
-                style
-                    .custom_verts
-                    .iter_mut()
-                    .for_each(|vertex| vertex.color = h_vert_clr);
+                style.user_vertexes.iter_mut().for_each(|(_, vertexes)| {
+                    vertexes
+                        .iter_mut()
+                        .for_each(|vertex| vertex.color = h_vert_clr)
+                });
             }
 
             button.style_update(style).expect_valid();
@@ -370,10 +374,11 @@ where
             }
 
             if let Some(vert_clr) = colors.vert_clr {
-                style
-                    .custom_verts
-                    .iter_mut()
-                    .for_each(|vertex| vertex.color = vert_clr);
+                style.user_vertexes.iter_mut().for_each(|(_, vertexes)| {
+                    vertexes
+                        .iter_mut()
+                        .for_each(|vertex| vertex.color = vert_clr)
+                });
             }
 
             button.style_update(style).expect_valid();

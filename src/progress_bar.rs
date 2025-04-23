@@ -234,14 +234,14 @@ impl ProgressBar {
 
         if let Some(roundness) = self.theme.roundness {
             let radius = widget_height_1_2.min(roundness);
-            container_style.border_radius_tl = radius;
-            container_style.border_radius_tr = radius;
-            container_style.border_radius_bl = radius;
-            container_style.border_radius_br = radius;
-            fill_style.border_radius_tl = radius;
-            fill_style.border_radius_tr = radius;
-            fill_style.border_radius_bl = radius;
-            fill_style.border_radius_br = radius;
+            container_style.border_radius_tl = Pixels(radius);
+            container_style.border_radius_tr = Pixels(radius);
+            container_style.border_radius_bl = Pixels(radius);
+            container_style.border_radius_br = Pixels(radius);
+            fill_style.border_radius_tl = Pixels(radius);
+            fill_style.border_radius_tr = Pixels(radius);
+            fill_style.border_radius_bl = Pixels(radius);
+            fill_style.border_radius_br = Pixels(radius);
         }
 
         Bin::style_update_batch([(&self.container, container_style), (&self.fill, fill_style)]);

@@ -4,9 +4,10 @@ use std::sync::Arc;
 use std::sync::atomic::{self, AtomicBool};
 use std::time::Duration;
 
+use basalt::image::ImageKey;
 use basalt::input::MouseButton;
 use basalt::interface::UnitValue::{Percent, Pixels};
-use basalt::interface::{Bin, BinID, BinStyle, BinVert, Color, Position};
+use basalt::interface::{Bin, BinID, BinStyle, BinVertex, Color, Position};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
@@ -882,15 +883,19 @@ impl ScrollBar {
                 upright_style.pos_from_b = Pixels(0.0);
                 upright_style.pos_from_r = Pixels(0.0);
                 upright_style.width = Pixels(size);
-                upright_style.custom_verts =
-                    right_symbol_verts(size, spacing, self.theme.colors.border1);
+                upright_style.user_vertexes = vec![(
+                    ImageKey::INVALID,
+                    right_symbol_verts(10.0, self.theme.colors.border1),
+                )];
 
                 downleft_style.pos_from_t = Pixels(0.0);
                 downleft_style.pos_from_b = Pixels(0.0);
                 downleft_style.pos_from_l = Pixels(0.0);
                 downleft_style.width = Pixels(size);
-                downleft_style.custom_verts =
-                    left_symbol_verts(size, spacing, self.theme.colors.border1);
+                downleft_style.user_vertexes = vec![(
+                    ImageKey::INVALID,
+                    left_symbol_verts(10.0, self.theme.colors.border1),
+                )];
 
                 confine_style.pos_from_t = Pixels(spacing);
                 confine_style.pos_from_b = Pixels(spacing);
@@ -912,15 +917,19 @@ impl ScrollBar {
                 upright_style.pos_from_l = Pixels(0.0);
                 upright_style.pos_from_r = Pixels(0.0);
                 upright_style.height = Pixels(size);
-                upright_style.custom_verts =
-                    up_symbol_verts(size, spacing, self.theme.colors.border1);
+                upright_style.user_vertexes = vec![(
+                    ImageKey::INVALID,
+                    up_symbol_verts(10.0, self.theme.colors.border1),
+                )];
 
                 downleft_style.pos_from_b = Pixels(0.0);
                 downleft_style.pos_from_l = Pixels(0.0);
                 downleft_style.pos_from_r = Pixels(0.0);
                 downleft_style.height = Pixels(size);
-                downleft_style.custom_verts =
-                    down_symbol_verts(size, spacing, self.theme.colors.border1);
+                downleft_style.user_vertexes = vec![(
+                    ImageKey::INVALID,
+                    down_symbol_verts(10.0, self.theme.colors.border1),
+                )];
 
                 confine_style.pos_from_t = Pixels(size + border_size);
                 confine_style.pos_from_b = Pixels(size + border_size);
@@ -958,10 +967,10 @@ impl ScrollBar {
 
         if self.theme.roundness.is_some() {
             let bar_size_1_2 = (size - (spacing * 2.0)) / 2.0;
-            bar_style.border_radius_tl = bar_size_1_2;
-            bar_style.border_radius_tr = bar_size_1_2;
-            bar_style.border_radius_bl = bar_size_1_2;
-            bar_style.border_radius_br = bar_size_1_2;
+            bar_style.border_radius_tl = Pixels(bar_size_1_2);
+            bar_style.border_radius_tr = Pixels(bar_size_1_2);
+            bar_style.border_radius_bl = Pixels(bar_size_1_2);
+            bar_style.border_radius_br = Pixels(bar_size_1_2);
         }
 
         Bin::style_update_batch([
@@ -974,41 +983,60 @@ impl ScrollBar {
     }
 }
 
-fn up_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
-    const UNIT_POINTS: [[f32; 2]; 3] = [[0.5, 0.25], [0.0, 0.75], [1.0, 0.75]];
-    symbol_verts(target_size, spacing, color, &UNIT_POINTS)
+fn up_symbol_verts(space_pct: f32, color: Color) -> Vec<BinVertex> {
+    symbol_verts(
+        color,
+        &[
+            [50.0, 25.0 + (space_pct / 2.0)],
+            [space_pct, 75.0 - (space_pct / 2.0)],
+            [100.0 - space_pct, 75.0],
+        ],
+    )
 }
 
-pub(crate) fn down_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
-    const UNIT_POINTS: [[f32; 2]; 3] = [[0.0, 0.25], [1.0, 0.25], [0.5, 0.75]];
-    symbol_verts(target_size, spacing, color, &UNIT_POINTS)
+pub(crate) fn down_symbol_verts(space_pct: f32, color: Color) -> Vec<BinVertex> {
+    symbol_verts(
+        color,
+        &[
+            [space_pct, 25.0 + (space_pct / 2.0)],
+            [100.0 - space_pct, 25.0 + (space_pct / 2.0)],
+            [50.0, 75.0 - (space_pct / 2.0)],
+        ],
+    )
 }
 
-fn left_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
-    const UNIT_POINTS: [[f32; 2]; 3] = [[0.75, 0.25], [0.25, 0.5], [0.75, 0.75]];
-    symbol_verts(target_size, spacing, color, &UNIT_POINTS)
+fn left_symbol_verts(space_pct: f32, color: Color) -> Vec<BinVertex> {
+    symbol_verts(
+        color,
+        &[
+            [75.0 - (space_pct / 2.0), space_pct],
+            [25.0 + (space_pct / 2.0), 50.0],
+            [75.0 - (space_pct / 2.0), 100.0 - space_pct],
+        ],
+    )
 }
 
-fn right_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
-    const UNIT_POINTS: [[f32; 2]; 3] = [[0.25, 0.25], [0.25, 0.75], [0.75, 0.5]];
-    symbol_verts(target_size, spacing, color, &UNIT_POINTS)
+fn right_symbol_verts(space_pct: f32, color: Color) -> Vec<BinVertex> {
+    symbol_verts(
+        color,
+        &[
+            [25.0 + (space_pct / 2.0), space_pct],
+            [25.0 + (space_pct / 2.0), 100.0 - space_pct],
+            [75.0 - (space_pct / 2.0), 50.0],
+        ],
+    )
 }
 
-fn symbol_verts(
-    target_size: f32,
-    spacing: f32,
-    color: Color,
-    unit_points: &[[f32; 2]; 3],
-) -> Vec<BinVert> {
-    let size = target_size - (spacing * 2.0);
-    let mut verts = Vec::with_capacity(3);
-
-    for [x, y] in unit_points.iter() {
-        verts.push(BinVert {
-            position: ((*x * size) + spacing, (*y * size) + spacing, 0),
-            color,
-        });
-    }
-
-    verts
+fn symbol_verts(color: Color, unit_points: &[[f32; 2]; 3]) -> Vec<BinVertex> {
+    unit_points
+        .into_iter()
+        .map(|[x, y]| {
+            BinVertex {
+                x: Percent(*x),
+                y: Percent(*y),
+                color,
+                ..Default::default()
+            }
+        })
+        .collect()
 }

@@ -380,10 +380,10 @@ impl ToggleButton {
         }
 
         if let Some(border_radius) = self.theme.roundness {
-            container_style.border_radius_tl = border_radius;
-            container_style.border_radius_tr = border_radius;
-            container_style.border_radius_bl = border_radius;
-            container_style.border_radius_br = border_radius;
+            container_style.border_radius_tl = Pixels(border_radius);
+            container_style.border_radius_tr = Pixels(border_radius);
+            container_style.border_radius_bl = Pixels(border_radius);
+            container_style.border_radius_br = Pixels(border_radius);
         }
 
         self.container.style_update(container_style).expect_valid();

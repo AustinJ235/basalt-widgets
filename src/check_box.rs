@@ -1,9 +1,10 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
+use basalt::image::ImageKey;
 use basalt::input::MouseButton;
-use basalt::interface::UnitValue::Pixels;
-use basalt::interface::{Bin, BinStyle, BinVert, Color, Position, Visibility};
+use basalt::interface::UnitValue::{Percent, Pixels};
+use basalt::interface::{Bin, BinStyle, BinVertex, Color, Position, Visibility};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
@@ -226,24 +227,9 @@ impl<T> CheckBox<T> {
     }
 
     fn style_update(&self) {
-        let width = self.theme.base_size; // TODO: Configurable
-        let width_1_2 = width / 2.0;
-        let check_space = (width_1_2 / 12.0).round().max(1.0);
-
         let mut container_style = BinStyle {
-            position: Position::Floating,
-            margin_t: Pixels(self.theme.spacing),
-            margin_b: Pixels(self.theme.spacing),
-            margin_l: Pixels(self.theme.spacing),
-            margin_r: Pixels(self.theme.spacing),
-            width: Pixels(width),
-            height: Pixels(width),
             back_color: self.theme.colors.back2,
-            border_radius_tl: width_1_2,
-            border_radius_tr: width_1_2,
-            border_radius_bl: width_1_2,
-            border_radius_br: width_1_2,
-            ..Default::default()
+            ..self.props.placement.clone().into_style()
         };
 
         let mut fill_style = BinStyle {
@@ -252,7 +238,10 @@ impl<T> CheckBox<T> {
             pos_from_b: Pixels(0.0),
             pos_from_l: Pixels(0.0),
             pos_from_r: Pixels(0.0),
-            custom_verts: check_symbol_verts(width, check_space, self.theme.colors.accent1),
+            user_vertexes: vec![(
+                ImageKey::INVALID,
+                check_symbol_verts(self.theme.colors.accent1),
+            )],
             ..Default::default()
         };
 
@@ -267,12 +256,11 @@ impl<T> CheckBox<T> {
             container_style.border_color_r = self.theme.colors.border1;
         }
 
-        if let Some(roundness) = self.theme.roundness {
-            let radius = roundness.min(width_1_2);
-            container_style.border_radius_tl = radius;
-            container_style.border_radius_tr = radius;
-            container_style.border_radius_bl = radius;
-            container_style.border_radius_br = radius;
+        if let Some(radius) = self.theme.roundness {
+            container_style.border_radius_tl = Pixels(radius);
+            container_style.border_radius_tr = Pixels(radius);
+            container_style.border_radius_bl = Pixels(radius);
+            container_style.border_radius_br = Pixels(radius);
         }
 
         if self.is_selected() {
@@ -293,7 +281,7 @@ where
     }
 }
 
-fn check_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
+fn check_symbol_verts(color: Color) -> Vec<BinVertex> {
     const UNIT_POS: [[f32; 2]; 6] = [
         [0.912, 0.131],
         [1.000, 0.218],
@@ -303,17 +291,14 @@ fn check_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVe
         [0.349, 0.868],
     ];
 
-    let size = target_size - (spacing * 2.0);
     let mut verts = Vec::with_capacity(12);
 
     for i in [5, 1, 0, 5, 0, 4, 5, 4, 2, 5, 2, 3] {
-        verts.push(BinVert {
-            position: (
-                (UNIT_POS[i][0] * size) + spacing,
-                (UNIT_POS[i][1] * size) + spacing,
-                0,
-            ),
+        verts.push(BinVertex {
+            x: Percent((UNIT_POS[i][0] * 90.0) + 5.0),
+            y: Percent((UNIT_POS[i][1] * 90.0) + 5.0),
             color,
+            ..Default::default()
         });
     }
 

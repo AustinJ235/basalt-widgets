@@ -1,10 +1,11 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
+use basalt::image::ImageKey;
 use basalt::input::{Qwerty, WindowState};
-use basalt::interface::UnitValue::{Pixels, Undefined};
+use basalt::interface::UnitValue::{Percent, Pixels, Undefined};
 use basalt::interface::{
-    Bin, BinStyle, BinVert, Color, Position, TextAttrs, TextBody, TextHoriAlign, TextVertAlign,
+    Bin, BinStyle, BinVertex, Color, Position, TextAttrs, TextBody, TextHoriAlign, TextVertAlign,
     TextWrap, Visibility, ZIndex,
 };
 use parking_lot::ReentrantMutex;
@@ -478,11 +479,10 @@ impl SpinButton {
             pos_from_b: Pixels(0.0),
             width: Pixels(widget_height),
             back_color: self.theme.colors.back3,
-            custom_verts: sub_symbol_verts(
-                text_height,
-                self.theme.spacing,
-                self.theme.colors.border2,
-            ),
+            user_vertexes: vec![(
+                ImageKey::INVALID,
+                sub_symbol_verts(text_height, self.theme.spacing, self.theme.colors.border2),
+            )],
             ..Default::default()
         };
 
@@ -492,11 +492,10 @@ impl SpinButton {
             pos_from_b: Pixels(0.0),
             width: Pixels(widget_height),
             back_color: self.theme.colors.back3,
-            custom_verts: add_symbol_verts(
-                text_height,
-                self.theme.spacing,
-                self.theme.colors.border2,
-            ),
+            user_vertexes: vec![(
+                ImageKey::INVALID,
+                add_symbol_verts(text_height, self.theme.spacing, self.theme.colors.border2),
+            )],
             ..Default::default()
         };
 
@@ -518,16 +517,16 @@ impl SpinButton {
         }
 
         if let Some(border_radius) = self.theme.roundness {
-            container_style.border_radius_tl = border_radius;
-            container_style.border_radius_tr = border_radius;
-            container_style.border_radius_bl = border_radius;
-            container_style.border_radius_br = border_radius;
+            container_style.border_radius_tl = Pixels(border_radius);
+            container_style.border_radius_tr = Pixels(border_radius);
+            container_style.border_radius_bl = Pixels(border_radius);
+            container_style.border_radius_br = Pixels(border_radius);
 
-            entry_style.border_radius_tl = border_radius;
-            entry_style.border_radius_bl = border_radius;
+            entry_style.border_radius_tl = Pixels(border_radius);
+            entry_style.border_radius_bl = Pixels(border_radius);
 
-            add_button_style.border_radius_tr = border_radius;
-            add_button_style.border_radius_br = border_radius;
+            add_button_style.border_radius_tr = Pixels(border_radius);
+            add_button_style.border_radius_br = Pixels(border_radius);
         }
 
         match self.props.width {
@@ -585,60 +584,43 @@ impl SpinButton {
     }
 }
 
-fn sub_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
-    let h_bar_l = spacing + 1.0;
-    let h_bar_r = spacing + target_size - 1.0;
-    let h_bar_t = spacing + ((target_size / 2.0) - 1.0);
-    let h_bar_b = h_bar_t + 2.0;
-    let mut verts = Vec::with_capacity(6);
+fn sub_symbol_verts(_target_size: f32, _spacing: f32, color: Color) -> Vec<BinVertex> {
+    const PCT_PTS: [[f32; 2]; 4] = [[25.0, 48.0], [75.0, 48.0], [25.0, 52.0], [75.0, 52.0]];
 
-    for [x, y] in [
-        [h_bar_r, h_bar_t],
-        [h_bar_l, h_bar_t],
-        [h_bar_l, h_bar_b],
-        [h_bar_r, h_bar_t],
-        [h_bar_l, h_bar_b],
-        [h_bar_r, h_bar_b],
-    ] {
-        verts.push(BinVert {
-            position: (x, y, 0),
-            color,
-        });
-    }
-
-    verts
+    [1, 0, 2, 1, 2, 3]
+        .into_iter()
+        .map(|i| {
+            BinVertex {
+                x: Percent(PCT_PTS[i][0]),
+                y: Percent(PCT_PTS[i][1]),
+                color,
+                ..Default::default()
+            }
+        })
+        .collect()
 }
 
-fn add_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
-    let v_bar_l = spacing + ((target_size / 2.0) - 1.0);
-    let v_bar_r = v_bar_l + 2.0;
-    let v_bar_t = spacing;
-    let v_bar_b = spacing + target_size;
-    let h_bar_l = spacing;
-    let h_bar_r = spacing + target_size;
-    let h_bar_t = spacing + ((target_size / 2.0) - 1.0);
-    let h_bar_b = h_bar_t + 2.0;
-    let mut verts = Vec::with_capacity(12);
+fn add_symbol_verts(_target_size: f32, _spacing: f32, color: Color) -> Vec<BinVertex> {
+    const PCT_PTS: [[f32; 2]; 8] = [
+        [25.0, 48.0],
+        [75.0, 48.0],
+        [25.0, 52.0],
+        [75.0, 52.0],
+        [48.0, 25.0],
+        [52.0, 25.0],
+        [48.0, 75.0],
+        [52.0, 75.0],
+    ];
 
-    for [x, y] in [
-        [v_bar_r, v_bar_t],
-        [v_bar_l, v_bar_t],
-        [v_bar_l, v_bar_b],
-        [v_bar_r, v_bar_t],
-        [v_bar_l, v_bar_b],
-        [v_bar_r, v_bar_b],
-        [h_bar_r, h_bar_t],
-        [h_bar_l, h_bar_t],
-        [h_bar_l, h_bar_b],
-        [h_bar_r, h_bar_t],
-        [h_bar_l, h_bar_b],
-        [h_bar_r, h_bar_b],
-    ] {
-        verts.push(BinVert {
-            position: (x, y, 0),
-            color,
-        });
-    }
-
-    verts
+    [1, 0, 2, 1, 2, 3, 5, 4, 6, 5, 6, 7]
+        .into_iter()
+        .map(|i| {
+            BinVertex {
+                x: Percent(PCT_PTS[i][0]),
+                y: Percent(PCT_PTS[i][1]),
+                color,
+                ..Default::default()
+            }
+        })
+        .collect()
 }

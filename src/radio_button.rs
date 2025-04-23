@@ -263,10 +263,10 @@ impl<T> RadioButton<T> {
             width: Pixels(width),
             height: Pixels(width),
             back_color: self.theme.colors.back2,
-            border_radius_tl: width_1_2,
-            border_radius_tr: width_1_2,
-            border_radius_bl: width_1_2,
-            border_radius_br: width_1_2,
+            border_radius_tl: Pixels(width_1_2),
+            border_radius_tr: Pixels(width_1_2),
+            border_radius_bl: Pixels(width_1_2),
+            border_radius_br: Pixels(width_1_2),
             ..Default::default()
         };
 
@@ -277,10 +277,10 @@ impl<T> RadioButton<T> {
             pos_from_l: Pixels(fill_gap),
             pos_from_r: Pixels(fill_gap),
             back_color: self.theme.colors.accent1,
-            border_radius_tl: width_1_2 - fill_gap,
-            border_radius_tr: width_1_2 - fill_gap,
-            border_radius_bl: width_1_2 - fill_gap,
-            border_radius_br: width_1_2 - fill_gap,
+            border_radius_tl: Pixels(width_1_2 - fill_gap),
+            border_radius_tr: Pixels(width_1_2 - fill_gap),
+            border_radius_bl: Pixels(width_1_2 - fill_gap),
+            border_radius_br: Pixels(width_1_2 - fill_gap),
             ..Default::default()
         };
 

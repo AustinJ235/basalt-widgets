@@ -2,8 +2,9 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use basalt::image::ImageKey;
 use basalt::input::{MouseButton, Qwerty};
-use basalt::interface::UnitValue::{PctOffsetPx, Pixels};
+use basalt::interface::UnitValue::{PctOffset, Pixels};
 use basalt::interface::{
     Bin, BinStyle, Position, TextAttrs, TextBody, TextHoriAlign, TextVertAlign, TextWrap,
     Visibility, ZIndex,
@@ -493,8 +494,8 @@ where
 
         if self.theme.roundness.is_some() {
             let mut container_style = self.container.style_copy();
-            container_style.border_radius_bl = 0.0;
-            container_style.border_radius_br = 0.0;
+            container_style.border_radius_bl = Default::default();
+            container_style.border_radius_br = Default::default();
             style_update_batch.push((&self.container, container_style));
         }
 
@@ -547,8 +548,8 @@ where
 
         if let Some(border_radius) = self.theme.roundness {
             let mut container_style = self.container.style_copy();
-            container_style.border_radius_bl = border_radius;
-            container_style.border_radius_br = border_radius;
+            container_style.border_radius_bl = Pixels(border_radius);
+            container_style.border_radius_br = Pixels(border_radius);
             style_update_batch.push((&self.container, container_style));
         }
 
@@ -732,11 +733,10 @@ where
             pos_from_b: Pixels(0.0),
             pos_from_r: Pixels(0.0),
             width: Pixels(widget_height),
-            custom_verts: down_symbol_verts(
-                widget_height,
-                self.theme.spacing,
-                self.theme.colors.text1a,
-            ),
+            user_vertexes: vec![(
+                ImageKey::INVALID,
+                down_symbol_verts(33.0, self.theme.colors.text1a),
+            )],
             ..Default::default()
         };
 
@@ -744,7 +744,7 @@ where
             position: Position::Anchor,
             z_index: ZIndex::Offset(100),
             visibility: Visibility::Hide,
-            pos_from_t: PctOffsetPx(100.0, border_size),
+            pos_from_t: PctOffset(100.0, border_size),
             pos_from_l: Pixels(0.0),
             pos_from_r: Pixels(0.0),
             height: Pixels(
@@ -799,13 +799,13 @@ where
         }
 
         if let Some(border_radius) = self.theme.roundness {
-            container_style.border_radius_tl = border_radius;
-            container_style.border_radius_tr = border_radius;
-            container_style.border_radius_bl = border_radius;
-            container_style.border_radius_br = border_radius;
+            container_style.border_radius_tl = Pixels(border_radius);
+            container_style.border_radius_tr = Pixels(border_radius);
+            container_style.border_radius_bl = Pixels(border_radius);
+            container_style.border_radius_br = Pixels(border_radius);
 
-            popup_style.border_radius_bl = border_radius;
-            popup_style.border_radius_br = border_radius;
+            popup_style.border_radius_bl = Pixels(border_radius);
+            popup_style.border_radius_br = Pixels(border_radius);
         }
 
         Bin::style_update_batch([

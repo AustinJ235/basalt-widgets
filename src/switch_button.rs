@@ -245,10 +245,10 @@ impl SwitchButton {
             margin_b: Pixels(self.theme.spacing),
             margin_l: Pixels(self.theme.spacing),
             margin_r: Pixels(self.theme.spacing),
-            border_radius_tl: widget_height / 2.0,
-            border_radius_tr: widget_height / 2.0,
-            border_radius_bl: widget_height / 2.0,
-            border_radius_br: widget_height / 2.0,
+            border_radius_tl: Pixels(widget_height / 2.0),
+            border_radius_tr: Pixels(widget_height / 2.0),
+            border_radius_bl: Pixels(widget_height / 2.0),
+            border_radius_br: Pixels(widget_height / 2.0),
             ..Default::default()
         };
 
@@ -259,10 +259,10 @@ impl SwitchButton {
             pos_from_b: Pixels(widget_height * 0.1),
             width: Pixels(knob_size),
             back_color: self.theme.colors.back1,
-            border_radius_tl: knob_size / 2.0,
-            border_radius_tr: knob_size / 2.0,
-            border_radius_bl: knob_size / 2.0,
-            border_radius_br: knob_size / 2.0,
+            border_radius_tl: Pixels(knob_size / 2.0),
+            border_radius_tr: Pixels(knob_size / 2.0),
+            border_radius_bl: Pixels(knob_size / 2.0),
+            border_radius_br: Pixels(knob_size / 2.0),
             ..Default::default()
         };
 

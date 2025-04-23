@@ -582,10 +582,10 @@ impl Scaler {
 
         let mut track_style = BinStyle {
             back_color: self.theme.colors.back3,
-            border_radius_tl: track_size / 2.0,
-            border_radius_tr: track_size / 2.0,
-            border_radius_bl: track_size / 2.0,
-            border_radius_br: track_size / 2.0,
+            border_radius_tl: Pixels(track_size / 2.0),
+            border_radius_tr: Pixels(track_size / 2.0),
+            border_radius_bl: Pixels(track_size / 2.0),
+            border_radius_br: Pixels(track_size / 2.0),
             ..Default::default()
         };
 
@@ -596,10 +596,10 @@ impl Scaler {
         let mut knob_style = BinStyle {
             position: Position::Anchor,
             back_color: self.theme.colors.accent1,
-            border_radius_tl: knob_size / 2.0,
-            border_radius_tr: knob_size / 2.0,
-            border_radius_bl: knob_size / 2.0,
-            border_radius_br: knob_size / 2.0,
+            border_radius_tl: Pixels(knob_size / 2.0),
+            border_radius_tr: Pixels(knob_size / 2.0),
+            border_radius_bl: Pixels(knob_size / 2.0),
+            border_radius_br: Pixels(knob_size / 2.0),
             ..Default::default()
         };
 
