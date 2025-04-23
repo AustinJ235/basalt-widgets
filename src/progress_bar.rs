@@ -7,7 +7,7 @@ use basalt::interface::{Bin, BinStyle, Position};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`ProgressBar`].
 pub struct ProgressBarBuilder<'a, C> {
@@ -16,21 +16,33 @@ pub struct ProgressBarBuilder<'a, C> {
     on_press: Vec<Box<dyn FnMut(&Arc<ProgressBar>, f32) + Send + 'static>>,
 }
 
-#[derive(Default)]
 struct Properties {
     pct: f32,
-    width: Option<f32>,
-    height: Option<f32>,
+    placement: WidgetPlacement,
+}
+
+impl Properties {
+    fn new(placement: WidgetPlacement) -> Self {
+        Self {
+            pct: 0.0,
+            placement,
+        }
+    }
 }
 
 impl<'a, C> ProgressBarBuilder<'a, C>
 where
     C: WidgetContainer,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>) -> Self {
         Self {
+            props: Properties::new(
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| ProgressBar::default_placement(&builder.theme)),
+            ),
             widget: builder,
-            props: Default::default(),
             on_press: Vec::new(),
         }
     }
@@ -40,18 +52,6 @@ where
     /// **Note**: When this isn't used the percent will be `0.0`.
     pub fn set_pct(mut self, pct: f32) -> Self {
         self.props.pct = pct.clamp(0.0, 100.0);
-        self
-    }
-
-    /// **Temporary**
-    pub fn width(mut self, width: f32) -> Self {
-        self.props.width = Some(width);
-        self
-    }
-
-    /// **Temporary**
-    pub fn height(mut self, height: f32) -> Self {
-        self.props.height = Some(height);
         self
     }
 
@@ -138,6 +138,19 @@ struct State {
 }
 
 impl ProgressBar {
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(theme.base_size * 4.0),
+            height: Pixels(theme.base_size),
+            ..Default::default()
+        }
+    }
+
     /// Set the percent
     pub fn set_pct(self: &Arc<Self>, pct: f32) {
         let pct = pct.clamp(0.0, 100.0);
@@ -187,29 +200,11 @@ impl ProgressBar {
     }
 
     fn style_update(self: &Arc<Self>) {
-        let widget_height = match self.props.height {
-            Some(height) => height,
-            None => self.theme.base_size,
-        };
-
-        let widget_width = match self.props.width {
-            Some(width) => width,
-            None => widget_height * 4.0,
-        };
-
-        let widget_height_1_2 = widget_height / 2.0;
         let pct = *self.state.lock().pct.borrow();
 
         let mut container_style = BinStyle {
-            position: Position::Floating,
-            height: Pixels(widget_height),
-            width: Pixels(widget_width),
-            margin_t: Pixels(self.theme.spacing),
-            margin_b: Pixels(self.theme.spacing),
-            margin_l: Pixels(self.theme.spacing),
-            margin_r: Pixels(self.theme.spacing),
             back_color: self.theme.colors.back2,
-            ..Default::default()
+            ..self.props.placement.clone().into_style()
         };
 
         let mut fill_style = BinStyle {
@@ -232,8 +227,7 @@ impl ProgressBar {
             container_style.border_color_r = self.theme.colors.border1;
         }
 
-        if let Some(roundness) = self.theme.roundness {
-            let radius = widget_height_1_2.min(roundness);
+        if let Some(radius) = self.theme.roundness {
             container_style.border_radius_tl = Pixels(radius);
             container_style.border_radius_tr = Pixels(radius);
             container_style.border_radius_bl = Pixels(radius);
