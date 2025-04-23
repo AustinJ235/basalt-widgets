@@ -4,12 +4,12 @@ use std::sync::Arc;
 use std::sync::atomic::{self, AtomicU64};
 
 use basalt::input::MouseButton;
-use basalt::interface::UnitValue::Pixels;
+use basalt::interface::UnitValue::{PctOfWidth, Percent, Pixels};
 use basalt::interface::{Bin, BinStyle, Position, Visibility};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 static GROUP_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -33,6 +33,16 @@ pub struct RadioButtonBuilder<'a, C, T> {
 
 struct Properties<T> {
     value: T,
+    placement: WidgetPlacement,
+}
+
+impl<T> Properties<T> {
+    pub fn new(value: T, placement: WidgetPlacement) -> Self {
+        Self {
+            value,
+            placement,
+        }
+    }
 }
 
 impl<'a, C, T> RadioButtonBuilder<'a, C, T>
@@ -40,12 +50,16 @@ where
     C: WidgetContainer,
     T: Send + Sync + 'static,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>, value: T) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>, value: T) -> Self {
         Self {
-            widget: builder,
-            props: Properties {
+            props: Properties::new(
                 value,
-            },
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| RadioButton::<()>::default_placement(&builder.theme)),
+            ),
+            widget: builder,
             selected: false,
             group: None,
             on_change: Vec::new(),
@@ -162,6 +176,19 @@ struct State<T> {
 }
 
 impl<T> RadioButton<T> {
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(theme.base_size),
+            height: Pixels(theme.base_size),
+            ..Default::default()
+        }
+    }
+
     /// Select this [`RadioButton`].
     pub fn select(self: &Arc<Self>) {
         let state = self.state.lock();
@@ -250,37 +277,26 @@ impl<T> RadioButton<T> {
     }
 
     fn style_update(&self) {
-        let width = self.theme.base_size; // TODO: Configurable
-        let width_1_2 = width / 2.0;
-        let fill_gap = (width / 8.0).round();
-
         let mut container_style = BinStyle {
-            position: Position::Floating,
-            margin_t: Pixels(self.theme.spacing),
-            margin_b: Pixels(self.theme.spacing),
-            margin_l: Pixels(self.theme.spacing),
-            margin_r: Pixels(self.theme.spacing),
-            width: Pixels(width),
-            height: Pixels(width),
             back_color: self.theme.colors.back2,
-            border_radius_tl: Pixels(width_1_2),
-            border_radius_tr: Pixels(width_1_2),
-            border_radius_bl: Pixels(width_1_2),
-            border_radius_br: Pixels(width_1_2),
-            ..Default::default()
+            border_radius_tl: PctOfWidth(50.0),
+            border_radius_tr: PctOfWidth(50.0),
+            border_radius_bl: PctOfWidth(50.0),
+            border_radius_br: PctOfWidth(50.0),
+            ..self.props.placement.clone().into_style()
         };
 
         let mut fill_style = BinStyle {
             visibility: Visibility::Hide,
-            pos_from_t: Pixels(fill_gap),
-            pos_from_b: Pixels(fill_gap),
-            pos_from_l: Pixels(fill_gap),
-            pos_from_r: Pixels(fill_gap),
+            pos_from_t: Percent(12.5),
+            pos_from_b: Percent(12.5),
+            pos_from_l: Percent(12.5),
+            pos_from_r: Percent(12.5),
+            border_radius_tl: PctOfWidth(50.0),
+            border_radius_tr: PctOfWidth(50.0),
+            border_radius_bl: PctOfWidth(50.0),
+            border_radius_br: PctOfWidth(50.0),
             back_color: self.theme.colors.accent1,
-            border_radius_tl: Pixels(width_1_2 - fill_gap),
-            border_radius_tr: Pixels(width_1_2 - fill_gap),
-            border_radius_bl: Pixels(width_1_2 - fill_gap),
-            border_radius_br: Pixels(width_1_2 - fill_gap),
             ..Default::default()
         };
 
