@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use basalt::image::ImageKey;
 use basalt::input::{MouseButton, Qwerty};
-use basalt::interface::UnitValue::{PctOffset, Pixels};
+use basalt::interface::UnitValue::{PctOfHeight, PctOffset, Pixels};
 use basalt::interface::{
     Bin, BinStyle, Position, TextAttrs, TextBody, TextHoriAlign, TextVertAlign, TextWrap,
     Visibility, ZIndex,
@@ -13,7 +13,7 @@ use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
 use crate::scroll_bar::down_symbol_verts;
-use crate::{ScrollBar, Theme, WidgetContainer};
+use crate::{ScrollBar, Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`Select`]
 pub struct SelectBuilder<'a, C, I> {
@@ -27,13 +27,15 @@ pub struct SelectBuilder<'a, C, I> {
 struct Properties {
     no_selection_label: String,
     drop_down_items: usize,
+    placement: WidgetPlacement,
 }
 
-impl Default for Properties {
-    fn default() -> Self {
+impl Properties {
+    fn new(placement: WidgetPlacement) -> Self {
         Self {
             no_selection_label: String::new(),
             drop_down_items: 3,
+            placement,
         }
     }
 }
@@ -43,10 +45,15 @@ where
     C: WidgetContainer,
     I: Ord + Copy + Send + 'static,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>) -> Self {
         Self {
+            props: Properties::new(
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| Select::<()>::default_placement(&builder.theme)),
+            ),
             widget: builder,
-            props: Default::default(),
             select: None,
             options: BTreeMap::new(),
             on_select: Vec::new(),
@@ -696,20 +703,11 @@ where
     }
 
     fn style_update(&self) {
-        let widget_height = self.theme.spacing + self.theme.base_size;
-        let widget_width = widget_height * 5.0;
         let border_size = self.theme.border.unwrap_or(0.0);
 
         let mut container_style = BinStyle {
-            position: Position::Floating,
-            margin_t: Pixels(self.theme.spacing),
-            margin_b: Pixels(self.theme.spacing),
-            margin_l: Pixels(self.theme.spacing),
-            margin_r: Pixels(self.theme.spacing),
-            width: Pixels(widget_width),
-            height: Pixels(widget_height),
             padding_l: Pixels(self.theme.spacing),
-            padding_r: Pixels(widget_height),
+            padding_r: PctOfHeight(100.0),
             back_color: self.theme.colors.back3,
             text_body: TextBody {
                 spans: vec![Default::default()],
@@ -725,14 +723,14 @@ where
                 },
                 ..Default::default()
             },
-            ..Default::default()
+            ..self.props.placement.clone().into_style()
         };
 
         let arrow_down_style = BinStyle {
             pos_from_t: Pixels(0.0),
             pos_from_b: Pixels(0.0),
             pos_from_r: Pixels(0.0),
-            width: Pixels(widget_height),
+            width: PctOfHeight(100.0),
             user_vertexes: vec![(
                 ImageKey::INVALID,
                 down_symbol_verts(33.0, self.theme.colors.text1a),
@@ -747,10 +745,9 @@ where
             pos_from_t: PctOffset(100.0, border_size),
             pos_from_l: Pixels(0.0),
             pos_from_r: Pixels(0.0),
-            height: Pixels(
-                (widget_height * self.props.drop_down_items as f32)
-                    + (border_size
-                        * (self.props.drop_down_items.checked_sub(1).unwrap_or(0) as f32)),
+            height: PctOffset(
+                100.0 * self.props.drop_down_items as f32,
+                border_size * self.props.drop_down_items.checked_sub(1).unwrap_or(0) as f32,
             ),
             back_color: self.theme.colors.back2,
             ..Default::default()
@@ -814,5 +811,23 @@ where
             (&self.popup, popup_style),
             (&self.option_list, option_list_style),
         ]);
+    }
+}
+
+impl<I> Select<I> {
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        let height = theme.spacing + theme.base_size;
+        let width = height * 5.0;
+
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(width),
+            height: Pixels(height),
+            ..Default::default()
+        }
     }
 }
