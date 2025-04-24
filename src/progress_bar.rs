@@ -138,19 +138,6 @@ struct State {
 }
 
 impl ProgressBar {
-    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
-        WidgetPlacement {
-            position: Position::Floating,
-            margin_t: Pixels(theme.spacing),
-            margin_b: Pixels(theme.spacing),
-            margin_l: Pixels(theme.spacing),
-            margin_r: Pixels(theme.spacing),
-            width: Pixels(theme.base_size * 4.0),
-            height: Pixels(theme.base_size),
-            ..Default::default()
-        }
-    }
-
     /// Set the percent
     pub fn set_pct(self: &Arc<Self>, pct: f32) {
         let pct = pct.clamp(0.0, 100.0);
@@ -196,6 +183,20 @@ impl ProgressBar {
 
         for on_press in state.on_press.borrow_mut().iter_mut() {
             on_press(self, pct);
+        }
+    }
+
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(theme.base_size * 4.0),
+            height: Pixels(theme.base_size),
+            ..Default::default()
         }
     }
 

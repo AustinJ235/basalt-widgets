@@ -507,6 +507,8 @@ impl Scaler {
             .push(Box::new(on_change));
     }
 
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`) and
+    /// the [`ScalerOrientation`](`ScalerOrientation`).
     pub fn default_placement(theme: &Theme, orientation: ScalerOrientation) -> WidgetPlacement {
         match orientation {
             ScalerOrientation::Horizontal => {

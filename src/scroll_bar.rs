@@ -859,6 +859,8 @@ impl ScrollBar {
         }
     }
 
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`) and
+    /// the [`ScrollAxis`](`ScrollAxis`).
     pub fn default_placement(theme: &Theme, axis: ScrollAxis) -> WidgetPlacement {
         match axis {
             ScrollAxis::X => {

@@ -176,19 +176,6 @@ struct State<T> {
 }
 
 impl<T> RadioButton<T> {
-    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
-        WidgetPlacement {
-            position: Position::Floating,
-            margin_t: Pixels(theme.spacing),
-            margin_b: Pixels(theme.spacing),
-            margin_l: Pixels(theme.spacing),
-            margin_r: Pixels(theme.spacing),
-            width: Pixels(theme.base_size),
-            height: Pixels(theme.base_size),
-            ..Default::default()
-        }
-    }
-
     /// Select this [`RadioButton`].
     pub fn select(self: &Arc<Self>) {
         let state = self.state.lock();
@@ -273,6 +260,20 @@ impl<T> RadioButton<T> {
             for on_change in on_change_cbs.iter_mut() {
                 on_change(self, selected);
             }
+        }
+    }
+
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(theme.base_size),
+            height: Pixels(theme.base_size),
+            ..Default::default()
         }
     }
 

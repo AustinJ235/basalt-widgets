@@ -213,6 +213,7 @@ impl<T> CheckBox<T> {
         }
     }
 
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
     pub fn default_placement(theme: &Theme) -> WidgetPlacement {
         WidgetPlacement {
             position: Position::Floating,

@@ -6,12 +6,11 @@ use basalt::input::MouseButton;
 use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{
     Bin, BinStyle, Position, TextAttrs, TextBody, TextHoriAlign, TextVertAlign, TextWrap,
-    Visibility,
 };
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`ToggleButton`]
 pub struct ToggleButtonBuilder<'a, C> {
@@ -20,24 +19,37 @@ pub struct ToggleButtonBuilder<'a, C> {
     on_change: Vec<Box<dyn FnMut(&Arc<ToggleButton>, bool) + Send + 'static>>,
 }
 
-#[derive(Default)]
 struct Properties {
     disabled_text: String,
     enabled_text: String,
     enabled: bool,
-    width: Option<f32>,
-    height: Option<f32>,
-    text_height: Option<f32>,
+    placement: WidgetPlacement,
+}
+
+impl Properties {
+    fn new(placement: WidgetPlacement) -> Self {
+        Self {
+            disabled_text: String::new(),
+            enabled_text: String::new(),
+            enabled: false,
+            placement,
+        }
+    }
 }
 
 impl<'a, C> ToggleButtonBuilder<'a, C>
 where
     C: WidgetContainer,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>) -> Self {
         Self {
+            props: Properties::new(
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| ToggleButton::default_placement(&builder.theme)),
+            ),
             widget: builder,
-            props: Default::default(),
             on_change: Vec::new(),
         }
     }
@@ -69,24 +81,6 @@ where
     /// **Note**: When this isn't used the initial value will be `false`.
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.props.enabled = enabled;
-        self
-    }
-
-    /// **Temporary**
-    pub fn width(mut self, width: f32) -> Self {
-        self.props.width = Some(width);
-        self
-    }
-
-    /// **Temporary**
-    pub fn height(mut self, height: f32) -> Self {
-        self.props.height = Some(height);
-        self
-    }
-
-    /// **Temporary**
-    pub fn text_height(mut self, text_height: f32) -> Self {
-        self.props.text_height = Some(text_height);
         self
     }
 
@@ -290,82 +284,49 @@ impl ToggleButton {
             .push(Box::new(on_change));
     }
 
-    fn style_update(&self) {
-        let text_height = self.props.text_height.unwrap_or(self.theme.text_height);
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        let height = theme.spacing + theme.base_size;
+        let width = height * 2.0;
 
-        let mut container_style = BinStyle {
+        WidgetPlacement {
             position: Position::Floating,
-            margin_t: Pixels(self.theme.spacing),
-            margin_b: Pixels(self.theme.spacing),
-            margin_l: Pixels(self.theme.spacing),
-            margin_r: Pixels(self.theme.spacing),
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(width),
+            height: Pixels(height),
+            ..Default::default()
+        }
+    }
+
+    fn style_update(&self) {
+        let mut container_style = BinStyle {
             text_body: TextBody {
                 spans: vec![Default::default()],
                 hori_align: TextHoriAlign::Center,
                 vert_align: TextVertAlign::Center,
                 text_wrap: TextWrap::None,
                 base_attrs: TextAttrs {
-                    height: Pixels(text_height),
+                    height: Pixels(self.theme.text_height),
                     font_family: self.theme.font_family.clone(),
                     font_weight: self.theme.font_weight,
                     ..Default::default()
                 },
                 ..Default::default()
             },
-            ..Default::default()
+            ..self.props.placement.clone().into_style()
         };
 
         if *self.state.lock().enabled.borrow() {
             container_style.back_color = self.theme.colors.accent2;
             container_style.text_body.base_attrs.color = self.theme.colors.text1b;
+            container_style.text_body.spans[0].text = self.props.enabled_text.clone();
         } else {
             container_style.back_color = self.theme.colors.back3;
             container_style.text_body.base_attrs.color = self.theme.colors.text1a;
-        }
-
-        let initial_text = if self.props.enabled {
-            self.props.enabled_text.clone()
-        } else {
-            self.props.disabled_text.clone()
-        };
-
-        match self.props.width {
-            Some(width) => {
-                container_style.width = Pixels(width);
-                container_style.text_body.spans[0].text = initial_text;
-            },
-            None => {
-                container_style.text_body.spans[0].text = (0..self
-                    .props
-                    .disabled_text
-                    .len()
-                    .max(self.props.enabled_text.len()))
-                    .map(|_| 'X')
-                    .collect();
-
-                container_style.width = Pixels(0.0);
-                container_style.visibility = Visibility::Hide;
-                let cb_spacing = self.theme.spacing;
-
-                self.container.on_update_once(move |container, _| {
-                    let width = Pixels((cb_spacing * 2.0) + container.calc_hori_overflow());
-
-                    container.style_modify(|style| {
-                        style.visibility = Visibility::Inheirt;
-                        style.width = width;
-                        style.text_body.spans[0].text = initial_text.clone();
-                    });
-                });
-            },
-        }
-
-        match self.props.height {
-            Some(height) => {
-                container_style.height = Pixels(height);
-            },
-            None => {
-                container_style.height = Pixels((self.theme.spacing * 2.0) + self.theme.spacing);
-            },
+            container_style.text_body.spans[0].text = self.props.disabled_text.clone();
         }
 
         if let Some(border_size) = self.theme.border {

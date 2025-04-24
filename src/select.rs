@@ -815,6 +815,7 @@ where
 }
 
 impl<I> Select<I> {
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
     pub fn default_placement(theme: &Theme) -> WidgetPlacement {
         let height = theme.spacing + theme.base_size;
         let width = height * 5.0;
