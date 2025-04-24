@@ -2,12 +2,12 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use basalt::input::MouseButton;
-use basalt::interface::UnitValue::{Pixels, Undefined};
+use basalt::interface::UnitValue::{PctOfHeight, PctOffset, Percent, Pixels};
 use basalt::interface::{Bin, BinStyle, Position};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`SwitchButton`]
 pub struct SwitchButtonBuilder<'a, C> {
@@ -19,18 +19,31 @@ pub struct SwitchButtonBuilder<'a, C> {
 #[derive(Default)]
 struct Properties {
     enabled: bool,
-    width: Option<f32>,
-    height: Option<f32>,
+    placement: WidgetPlacement,
+}
+
+impl Properties {
+    fn new(placement: WidgetPlacement) -> Self {
+        Self {
+            enabled: false,
+            placement,
+        }
+    }
 }
 
 impl<'a, C> SwitchButtonBuilder<'a, C>
 where
     C: WidgetContainer,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>) -> Self {
         Self {
+            props: Properties::new(
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| SwitchButton::default_placement(&builder.theme)),
+            ),
             widget: builder,
-            props: Default::default(),
             on_change: Vec::new(),
         }
     }
@@ -40,18 +53,6 @@ where
     /// **Note**: When this isn't used the initial value will be `false`.
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.props.enabled = enabled;
-        self
-    }
-
-    /// **Temporary**
-    pub fn width(mut self, width: f32) -> Self {
-        self.props.width = Some(width);
-        self
-    }
-
-    /// **Temporary**
-    pub fn height(mut self, height: f32) -> Self {
-        self.props.height = Some(height);
         self
     }
 
@@ -144,11 +145,6 @@ impl SwitchButton {
         let state = self.state.lock();
         *state.enabled.borrow_mut() = enabled;
 
-        let widget_height = match self.props.height {
-            Some(height) => height,
-            None => self.theme.base_size,
-        };
-
         if enabled {
             Bin::style_update_batch([
                 (
@@ -161,8 +157,8 @@ impl SwitchButton {
                 (
                     &self.knob,
                     BinStyle {
-                        pos_from_r: Pixels(widget_height * 0.1),
-                        pos_from_l: Undefined,
+                        pos_from_r: PctOffset(10.0, -self.theme.border.unwrap_or(0.0)),
+                        pos_from_l: Default::default(),
                         ..self.knob.style_copy()
                     },
                 ),
@@ -179,8 +175,8 @@ impl SwitchButton {
                 (
                     &self.knob,
                     BinStyle {
-                        pos_from_l: Pixels(widget_height * 0.1),
-                        pos_from_r: Undefined,
+                        pos_from_l: PctOffset(10.0, -self.theme.border.unwrap_or(0.0)),
+                        pos_from_r: Default::default(),
                         ..self.knob.style_copy()
                     },
                 ),
@@ -224,54 +220,51 @@ impl SwitchButton {
             .push(Box::new(on_change));
     }
 
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        let height = theme.base_size;
+        let width = height * 2.0;
+
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(width),
+            height: Pixels(height),
+            ..Default::default()
+        }
+    }
+
     fn style_update(&self) {
-        let widget_height = match self.props.height {
-            Some(height) => height,
-            None => self.theme.base_size,
-        };
-
-        let widget_width = match self.props.width {
-            Some(width) => width.max(widget_height),
-            None => widget_height * 2.0,
-        };
-
         let enabled = *self.state.lock().enabled.borrow();
 
         let mut container_style = BinStyle {
-            position: Position::Floating,
-            height: Pixels(widget_height),
-            width: Pixels(widget_width),
-            margin_t: Pixels(self.theme.spacing),
-            margin_b: Pixels(self.theme.spacing),
-            margin_l: Pixels(self.theme.spacing),
-            margin_r: Pixels(self.theme.spacing),
-            border_radius_tl: Pixels(widget_height / 2.0),
-            border_radius_tr: Pixels(widget_height / 2.0),
-            border_radius_bl: Pixels(widget_height / 2.0),
-            border_radius_br: Pixels(widget_height / 2.0),
-            ..Default::default()
+            border_radius_tl: PctOfHeight(50.0),
+            border_radius_tr: PctOfHeight(50.0),
+            border_radius_bl: PctOfHeight(50.0),
+            border_radius_br: PctOfHeight(50.0),
+            ..self.props.placement.clone().into_style()
         };
 
-        let knob_size = widget_height - (widget_height * 0.2);
-
         let mut knob_style = BinStyle {
-            pos_from_t: Pixels(widget_height * 0.1),
-            pos_from_b: Pixels(widget_height * 0.1),
-            width: Pixels(knob_size),
+            pos_from_t: Percent(10.0),
+            pos_from_b: Percent(10.0),
+            width: PctOfHeight(80.0),
             back_color: self.theme.colors.back1,
-            border_radius_tl: Pixels(knob_size / 2.0),
-            border_radius_tr: Pixels(knob_size / 2.0),
-            border_radius_bl: Pixels(knob_size / 2.0),
-            border_radius_br: Pixels(knob_size / 2.0),
+            border_radius_tl: PctOfHeight(50.0),
+            border_radius_tr: PctOfHeight(50.0),
+            border_radius_bl: PctOfHeight(50.0),
+            border_radius_br: PctOfHeight(50.0),
             ..Default::default()
         };
 
         if enabled {
             container_style.back_color = self.theme.colors.accent1;
-            knob_style.pos_from_r = Pixels(widget_height * 0.1);
+            knob_style.pos_from_r = PctOffset(10.0, -self.theme.border.unwrap_or(0.0));
         } else {
             container_style.back_color = self.theme.colors.back3;
-            knob_style.pos_from_l = Pixels(widget_height * 0.1);
+            knob_style.pos_from_l = PctOffset(10.0, -self.theme.border.unwrap_or(0.0));
         }
 
         if let Some(border_size) = self.theme.border {
