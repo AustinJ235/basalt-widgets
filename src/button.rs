@@ -136,6 +136,20 @@ struct State {
 }
 
 impl Button {
+    /// Add a callback to be called when the [`Button`] is pressed.
+    ///
+    /// **Panics**: When adding a callback within the callback.
+    pub fn on_press<F>(&self, on_press: F)
+    where
+        F: FnMut(&Arc<Button>) + Send + 'static,
+    {
+        self.state
+            .lock()
+            .on_press
+            .borrow_mut()
+            .push(Box::new(on_press));
+    }
+
     pub fn default_placement(theme: &Theme) -> WidgetPlacement {
         let height = theme.spacing + theme.base_size;
         let width = height * 2.0;
@@ -150,20 +164,6 @@ impl Button {
             height: Pixels(height),
             ..Default::default()
         }
-    }
-
-    /// Add a callback to be called when the [`Button`] is pressed.
-    ///
-    /// **Panics**: When adding a callback within the callback.
-    pub fn on_press<F>(&self, on_press: F)
-    where
-        F: FnMut(&Arc<Button>) + Send + 'static,
-    {
-        self.state
-            .lock()
-            .on_press
-            .borrow_mut()
-            .push(Box::new(on_press));
     }
 
     fn style_update(&self) {
