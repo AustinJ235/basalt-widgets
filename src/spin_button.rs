@@ -3,16 +3,16 @@ use std::sync::Arc;
 
 use basalt::image::ImageKey;
 use basalt::input::{Qwerty, WindowState};
-use basalt::interface::UnitValue::{Percent, Pixels, Undefined};
+use basalt::interface::UnitValue::{PctOfHeight, PctOfHeightOffset, Percent, Pixels};
 use basalt::interface::{
     Bin, BinStyle, BinVertex, Color, Position, TextAttrs, TextBody, TextHoriAlign, TextVertAlign,
-    TextWrap, Visibility, ZIndex,
+    TextWrap, ZIndex,
 };
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
 use crate::button::{BtnHookColors, button_hooks};
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`SpinButton`]
 pub struct SpinButtonBuilder<'a, C> {
@@ -39,13 +39,11 @@ struct Properties {
     small_step: i32,
     medium_step: i32,
     large_step: i32,
-    width: Option<f32>,
-    height: Option<f32>,
-    text_height: Option<f32>,
+    placement: WidgetPlacement,
 }
 
-impl Default for Properties {
-    fn default() -> Self {
+impl Properties {
+    fn new(placement: WidgetPlacement) -> Self {
         Self {
             min: 0,
             max: 0,
@@ -53,9 +51,7 @@ impl Default for Properties {
             small_step: 1,
             medium_step: 1,
             large_step: 1,
-            width: None,
-            height: None,
-            text_height: None,
+            placement,
         }
     }
 }
@@ -64,10 +60,15 @@ impl<'a, C> SpinButtonBuilder<'a, C>
 where
     C: WidgetContainer,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>) -> Self {
         Self {
+            props: Properties::new(
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| SpinButton::default_placement(&builder.theme)),
+            ),
             widget: builder,
-            props: Default::default(),
             on_change: Vec::new(),
         }
     }
@@ -127,24 +128,6 @@ where
     /// - When this isn't used the large step will be `1`.
     pub fn large_step(mut self, step: i32) -> Self {
         self.props.large_step = step;
-        self
-    }
-
-    /// **Temporary**
-    pub fn width(mut self, width: f32) -> Self {
-        self.props.width = Some(width);
-        self
-    }
-
-    /// **Temporary**
-    pub fn height(mut self, height: f32) -> Self {
-        self.props.height = Some(height);
-        self
-    }
-
-    /// **Temporary**
-    pub fn text_height(mut self, text_height: f32) -> Self {
-        self.props.text_height = Some(text_height);
         self
     }
 
@@ -308,10 +291,10 @@ where
             cb_spin_button
                 .entry
                 .style_update(BinStyle {
-                    border_size_t: Undefined,
-                    border_size_b: Undefined,
-                    border_size_l: Undefined,
-                    border_size_r: Undefined,
+                    border_size_t: Default::default(),
+                    border_size_b: Default::default(),
+                    border_size_l: Default::default(),
+                    border_size_r: Default::default(),
                     ..cb_spin_button.entry.style_copy()
                 })
                 .expect_valid();
@@ -425,31 +408,32 @@ impl SpinButton {
             .push(Box::new(on_change));
     }
 
-    fn style_update(self: &Arc<Self>) {
-        let text_height = self.props.text_height.unwrap_or(self.theme.text_height);
-        let border_size = self.theme.border.unwrap_or(0.0);
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        let height = theme.spacing + theme.base_size;
+        let width = height * 3.5;
 
-        let widget_height = match self.props.height {
-            Some(height) => height,
-            None => (self.theme.spacing * 2.0) + self.theme.spacing,
-        };
-
-        let mut container_style = BinStyle {
+        WidgetPlacement {
             position: Position::Floating,
-            margin_t: Pixels(self.theme.spacing),
-            margin_b: Pixels(self.theme.spacing),
-            margin_l: Pixels(self.theme.spacing),
-            margin_r: Pixels(self.theme.spacing),
-            height: Pixels(widget_height),
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(width),
+            height: Pixels(height),
             ..Default::default()
-        };
+        }
+    }
+
+    fn style_update(self: &Arc<Self>) {
+        let border_size = self.theme.border.unwrap_or(0.0);
+        let mut container_style = self.props.placement.clone().into_style();
 
         let mut entry_style = BinStyle {
             z_index: ZIndex::Offset(1),
             pos_from_t: Pixels(0.0),
             pos_from_l: Pixels(0.0),
             pos_from_b: Pixels(0.0),
-            pos_from_r: Pixels((widget_height * 2.0) + (border_size * 2.0)),
+            pos_from_r: PctOfHeightOffset(200.0, border_size * 2.0),
             back_color: self.theme.colors.back2,
             border_color_t: self.theme.colors.accent1,
             border_color_b: self.theme.colors.accent1,
@@ -457,12 +441,12 @@ impl SpinButton {
             border_color_r: self.theme.colors.accent1,
             padding_l: Pixels(self.theme.spacing),
             text_body: TextBody {
-                spans: vec![Default::default()],
+                spans: vec![format!("{}", self.props.val).into()],
                 hori_align: TextHoriAlign::Left,
                 vert_align: TextVertAlign::Center,
                 text_wrap: TextWrap::None,
                 base_attrs: TextAttrs {
-                    height: Pixels(text_height),
+                    height: Pixels(self.theme.text_height),
                     color: self.theme.colors.text1a,
                     font_family: self.theme.font_family.clone(),
                     font_weight: self.theme.font_weight,
@@ -475,13 +459,17 @@ impl SpinButton {
 
         let mut sub_button_style = BinStyle {
             pos_from_t: Pixels(0.0),
-            pos_from_r: Pixels(widget_height + border_size),
+            pos_from_r: PctOfHeightOffset(100.0, border_size),
             pos_from_b: Pixels(0.0),
-            width: Pixels(widget_height),
+            width: PctOfHeight(100.0),
             back_color: self.theme.colors.back3,
             user_vertexes: vec![(
                 ImageKey::INVALID,
-                sub_symbol_verts(text_height, self.theme.spacing, self.theme.colors.border2),
+                sub_symbol_verts(
+                    self.theme.text_height,
+                    self.theme.spacing,
+                    self.theme.colors.border2,
+                ),
             )],
             ..Default::default()
         };
@@ -490,11 +478,15 @@ impl SpinButton {
             pos_from_t: Pixels(0.0),
             pos_from_r: Pixels(0.0),
             pos_from_b: Pixels(0.0),
-            width: Pixels(widget_height),
+            width: PctOfHeight(100.0),
             back_color: self.theme.colors.back3,
             user_vertexes: vec![(
                 ImageKey::INVALID,
-                add_symbol_verts(text_height, self.theme.spacing, self.theme.colors.border2),
+                add_symbol_verts(
+                    self.theme.text_height,
+                    self.theme.spacing,
+                    self.theme.colors.border2,
+                ),
             )],
             ..Default::default()
         };
@@ -529,52 +521,6 @@ impl SpinButton {
             add_button_style.border_radius_br = Pixels(border_radius);
         }
 
-        match self.props.width {
-            Some(width) => {
-                let min_widget_width = (widget_height * 3.0) + (border_size * 2.0);
-                container_style.width = Pixels(min_widget_width.max(width));
-                entry_style.text_body.spans[0].text = format!("{}", self.props.val);
-            },
-            None => {
-                let min_val_places = self.props.min.abs().checked_ilog10().unwrap_or(0) + 1;
-
-                let max_val_places = self.props.max.abs().checked_ilog10().unwrap_or(0) + 1;
-                let mut places = min_val_places.max(max_val_places);
-
-                if self.props.min.is_negative() {
-                    places += 1;
-                }
-
-                let base_widget_width =
-                    (widget_height * 2.0) + (border_size * 2.0) + self.theme.spacing;
-
-                entry_style.text_body.spans[0].text = (0..places).map(|_| '9').collect();
-                container_style.width = Pixels(base_widget_width);
-                container_style.visibility = Visibility::Hide;
-
-                let cb_spin_button = self.clone();
-
-                self.entry.on_update_once(move |_, _| {
-                    cb_spin_button
-                        .container
-                        .style_update(BinStyle {
-                            width: Pixels(
-                                base_widget_width
-                                    + cb_spin_button.entry.calc_hori_overflow()
-                                    + cb_spin_button.theme.spacing,
-                            ),
-                            visibility: Visibility::Inheirt,
-                            ..cb_spin_button.container.style_copy()
-                        })
-                        .expect_valid();
-
-                    cb_spin_button.entry.style_modify(|style| {
-                        style.text_body.spans[0].text = format!("{}", cb_spin_button.props.val);
-                    });
-                });
-            },
-        }
-
         Bin::style_update_batch([
             (&self.container, container_style),
             (&self.entry, entry_style),
@@ -585,7 +531,7 @@ impl SpinButton {
 }
 
 fn sub_symbol_verts(_target_size: f32, _spacing: f32, color: Color) -> Vec<BinVertex> {
-    const PCT_PTS: [[f32; 2]; 4] = [[25.0, 48.0], [75.0, 48.0], [25.0, 52.0], [75.0, 52.0]];
+    const PCT_PTS: [[f32; 2]; 4] = [[25.0, 47.0], [75.0, 47.0], [25.0, 53.0], [75.0, 53.0]];
 
     [1, 0, 2, 1, 2, 3]
         .into_iter()
@@ -602,14 +548,14 @@ fn sub_symbol_verts(_target_size: f32, _spacing: f32, color: Color) -> Vec<BinVe
 
 fn add_symbol_verts(_target_size: f32, _spacing: f32, color: Color) -> Vec<BinVertex> {
     const PCT_PTS: [[f32; 2]; 8] = [
-        [25.0, 48.0],
-        [75.0, 48.0],
-        [25.0, 52.0],
-        [75.0, 52.0],
-        [48.0, 25.0],
-        [52.0, 25.0],
-        [48.0, 75.0],
-        [52.0, 75.0],
+        [25.0, 47.0],
+        [75.0, 47.0],
+        [25.0, 53.0],
+        [75.0, 53.0],
+        [47.0, 25.0],
+        [53.0, 25.0],
+        [47.0, 75.0],
+        [53.0, 75.0],
     ];
 
     [1, 0, 2, 1, 2, 3, 5, 4, 6, 5, 6, 7]
