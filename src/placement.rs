@@ -1,9 +1,11 @@
 use basalt::interface::UnitValue::Undefined;
-use basalt::interface::{BinStyle, Position, UnitValue};
+use basalt::interface::{BinStyle, FloatWeight, Position, UnitValue, ZIndex};
 
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct WidgetPlacement {
     pub position: Position,
+    pub z_index: ZIndex,
+    pub float_weight: FloatWeight,
     pub pos_from_t: UnitValue,
     pub pos_from_b: UnitValue,
     pub pos_from_l: UnitValue,
@@ -138,6 +140,8 @@ impl WidgetPlacement {
     pub(crate) fn into_style(self) -> BinStyle {
         BinStyle {
             position: self.position,
+            z_index: self.z_index,
+            float_weight: self.float_weight,
             pos_from_t: self.pos_from_t,
             pos_from_b: self.pos_from_b,
             pos_from_l: self.pos_from_l,
