@@ -4,11 +4,12 @@ use std::sync::Arc;
 use std::sync::atomic::{self, AtomicU64};
 
 use basalt::input::MouseButton;
-use basalt::interface::{Bin, BinPosition, BinStyle};
+use basalt::interface::UnitValue::{PctOfWidth, Percent, Pixels};
+use basalt::interface::{Bin, BinStyle, Position, Visibility};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 static GROUP_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -32,6 +33,16 @@ pub struct RadioButtonBuilder<'a, C, T> {
 
 struct Properties<T> {
     value: T,
+    placement: WidgetPlacement,
+}
+
+impl<T> Properties<T> {
+    pub fn new(value: T, placement: WidgetPlacement) -> Self {
+        Self {
+            value,
+            placement,
+        }
+    }
 }
 
 impl<'a, C, T> RadioButtonBuilder<'a, C, T>
@@ -39,12 +50,16 @@ where
     C: WidgetContainer,
     T: Send + Sync + 'static,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>, value: T) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>, value: T) -> Self {
         Self {
-            widget: builder,
-            props: Properties {
+            props: Properties::new(
                 value,
-            },
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| RadioButton::<()>::default_placement(&builder.theme)),
+            ),
+            widget: builder,
             selected: false,
             group: None,
             on_change: Vec::new(),
@@ -234,9 +249,9 @@ impl<T> RadioButton<T> {
         let mut fill_style = self.fill.style_copy();
 
         if selected {
-            fill_style.hidden = None;
+            fill_style.visibility = Visibility::Inheirt;
         } else {
-            fill_style.hidden = Some(true);
+            fill_style.visibility = Visibility::Hide;
         }
 
         self.fill.style_update(fill_style).expect_valid();
@@ -248,55 +263,57 @@ impl<T> RadioButton<T> {
         }
     }
 
-    fn style_update(&self) {
-        let width = self.theme.base_size; // TODO: Configurable
-        let width_1_2 = width / 2.0;
-        let fill_gap = (width / 8.0).round();
-
-        let mut container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
-            width: Some(width),
-            height: Some(width),
-            back_color: Some(self.theme.colors.back2),
-            border_radius_tl: Some(width_1_2),
-            border_radius_tr: Some(width_1_2),
-            border_radius_bl: Some(width_1_2),
-            border_radius_br: Some(width_1_2),
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(theme.base_size),
+            height: Pixels(theme.base_size),
             ..Default::default()
+        }
+    }
+
+    fn style_update(&self) {
+        let mut container_style = BinStyle {
+            back_color: self.theme.colors.back2,
+            border_radius_tl: PctOfWidth(50.0),
+            border_radius_tr: PctOfWidth(50.0),
+            border_radius_bl: PctOfWidth(50.0),
+            border_radius_br: PctOfWidth(50.0),
+            ..self.props.placement.clone().into_style()
         };
 
         let mut fill_style = BinStyle {
-            hidden: Some(true),
-            position: Some(BinPosition::Parent),
-            pos_from_t: Some(fill_gap),
-            pos_from_b: Some(fill_gap),
-            pos_from_l: Some(fill_gap),
-            pos_from_r: Some(fill_gap),
-            back_color: Some(self.theme.colors.accent1),
-            border_radius_tl: Some(width_1_2 - fill_gap),
-            border_radius_tr: Some(width_1_2 - fill_gap),
-            border_radius_bl: Some(width_1_2 - fill_gap),
-            border_radius_br: Some(width_1_2 - fill_gap),
+            visibility: Visibility::Hide,
+            pos_from_t: Percent(12.5),
+            pos_from_b: Percent(12.5),
+            pos_from_l: Percent(12.5),
+            pos_from_r: Percent(12.5),
+            border_radius_tl: PctOfWidth(50.0),
+            border_radius_tr: PctOfWidth(50.0),
+            border_radius_bl: PctOfWidth(50.0),
+            border_radius_br: PctOfWidth(50.0),
+            back_color: self.theme.colors.accent1,
             ..Default::default()
         };
 
         if let Some(border_size) = self.theme.border {
-            container_style.border_size_t = Some(border_size);
-            container_style.border_size_b = Some(border_size);
-            container_style.border_size_l = Some(border_size);
-            container_style.border_size_r = Some(border_size);
-            container_style.border_color_t = Some(self.theme.colors.border1);
-            container_style.border_color_b = Some(self.theme.colors.border1);
-            container_style.border_color_l = Some(self.theme.colors.border1);
-            container_style.border_color_r = Some(self.theme.colors.border1);
+            container_style.border_size_t = Pixels(border_size);
+            container_style.border_size_b = Pixels(border_size);
+            container_style.border_size_l = Pixels(border_size);
+            container_style.border_size_r = Pixels(border_size);
+            container_style.border_color_t = self.theme.colors.border1;
+            container_style.border_color_b = self.theme.colors.border1;
+            container_style.border_color_l = self.theme.colors.border1;
+            container_style.border_color_r = self.theme.colors.border1;
         }
 
         if self.is_selected() {
-            fill_style.hidden = None;
+            fill_style.visibility = Visibility::Inheirt;
         }
 
         Bin::style_update_batch([(&self.container, container_style), (&self.fill, fill_style)]);

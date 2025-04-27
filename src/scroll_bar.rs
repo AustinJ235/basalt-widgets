@@ -4,13 +4,17 @@ use std::sync::Arc;
 use std::sync::atomic::{self, AtomicBool};
 use std::time::Duration;
 
+use basalt::image::ImageKey;
 use basalt::input::MouseButton;
-use basalt::interface::{Bin, BinID, BinPosition, BinStyle, BinVert, Color};
+use basalt::interface::UnitValue::{
+    PctOfHeight, PctOfHeightOffset, PctOfWidth, PctOfWidthOffset, Percent, Pixels,
+};
+use basalt::interface::{Bin, BinID, BinStyle, BinVertex, Color, Position};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
 use crate::button::{BtnHookColors, button_hooks};
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 /// Determintes the orientation and axis of the [`ScrollBar`].
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,6 +37,7 @@ struct Properties {
     accel_pow: f32,
     max_accel_mult: f32,
     animation_duration: Duration,
+    placement: WidgetPlacement,
 }
 
 #[derive(Default)]
@@ -41,7 +46,7 @@ struct InitialState {
 }
 
 impl Properties {
-    fn default_target(target: Arc<Bin>) -> Self {
+    fn new(target: Arc<Bin>, placement: WidgetPlacement) -> Self {
         Self {
             target,
             axis: ScrollAxis::Y,
@@ -51,6 +56,7 @@ impl Properties {
             accel_pow: 1.2,
             max_accel_mult: 4.0,
             animation_duration: Duration::from_millis(100),
+            placement,
         }
     }
 }
@@ -60,19 +66,26 @@ pub struct ScrollBarBuilder<'a, C> {
     widget: WidgetBuilder<'a, C>,
     props: Properties,
     initial_state: InitialState,
+    plmt_is_default: bool,
 }
 
 impl<'a, C> ScrollBarBuilder<'a, C>
 where
     C: WidgetContainer,
 {
-    pub(crate) fn with_builder<T>(builder: WidgetBuilder<'a, C>, target: T) -> Self
+    pub(crate) fn with_builder<T>(mut builder: WidgetBuilder<'a, C>, target: T) -> Self
     where
         T: WidgetContainer,
     {
         Self {
+            plmt_is_default: builder.placement.is_none(),
+            props: Properties::new(
+                target.container_bin().clone(),
+                builder.placement.take().unwrap_or_else(|| {
+                    ScrollBar::default_placement(&builder.theme, Default::default())
+                }),
+            ),
             widget: builder,
-            props: Properties::default_target(target.container_bin().clone()),
             initial_state: Default::default(),
         }
     }
@@ -91,6 +104,10 @@ where
     ///
     /// **Note**: If not set this defaults to [`ScrollAxis::Y`].
     pub fn axis(mut self, axis: ScrollAxis) -> Self {
+        if self.plmt_is_default {
+            self.props.placement = ScrollBar::default_placement(&self.widget.theme, axis);
+        }
+
         self.props.axis = axis;
         self
     }
@@ -191,8 +208,8 @@ where
                 .container_bin()
                 .style_inspect(|style| {
                     match self.props.axis {
-                        ScrollAxis::X => style.scroll_x.unwrap_or(0.0),
-                        ScrollAxis::Y => style.scroll_y.unwrap_or(0.0),
+                        ScrollAxis::X => style.scroll_x,
+                        ScrollAxis::Y => style.scroll_y,
                     }
                 })
         });
@@ -816,25 +833,21 @@ impl ScrollBar {
 
         match self.props.axis {
             ScrollAxis::X => {
-                if target_style.scroll_x.is_none()
-                    || target_style.scroll_x.unwrap() != target_state.scroll
-                {
-                    target_style.scroll_x = Some(target_state.scroll);
+                if target_style.scroll_x != target_state.scroll {
+                    target_style.scroll_x = target_state.scroll;
                     target_style_update = true;
 
-                    bar_style.pos_from_l_pct = Some(bar_offset_pct);
-                    bar_style.width_pct = Some(bar_size_pct);
+                    bar_style.pos_from_l = Percent(bar_offset_pct);
+                    bar_style.width = Percent(bar_size_pct);
                 }
             },
             ScrollAxis::Y => {
-                if target_style.scroll_y.is_none()
-                    || target_style.scroll_y.unwrap() != target_state.scroll
-                {
-                    target_style.scroll_y = Some(target_state.scroll);
+                if target_style.scroll_y != target_state.scroll {
+                    target_style.scroll_y = target_state.scroll;
                     target_style_update = true;
 
-                    bar_style.pos_from_t_pct = Some(bar_offset_pct);
-                    bar_style.height_pct = Some(bar_size_pct);
+                    bar_style.pos_from_t = Percent(bar_offset_pct);
+                    bar_style.height = Percent(bar_size_pct);
                 }
             },
         }
@@ -846,131 +859,165 @@ impl ScrollBar {
         }
     }
 
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`) and
+    /// the [`ScrollAxis`](`ScrollAxis`).
+    pub fn default_placement(theme: &Theme, axis: ScrollAxis) -> WidgetPlacement {
+        match axis {
+            ScrollAxis::X => {
+                WidgetPlacement {
+                    pos_from_b: Pixels(0.0),
+                    pos_from_l: Pixels(0.0),
+                    pos_from_r: Pixels(0.0),
+                    height: Pixels((theme.base_size / 1.5).ceil()),
+                    ..Default::default()
+                }
+            },
+            ScrollAxis::Y => {
+                WidgetPlacement {
+                    pos_from_t: Pixels(0.0),
+                    pos_from_b: Pixels(0.0),
+                    pos_from_r: Pixels(0.0),
+                    width: Pixels((theme.base_size / 1.5).ceil()),
+                    ..Default::default()
+                }
+            },
+        }
+    }
+
     fn style_update(&self) {
-        let size = (self.theme.base_size / 1.5).ceil();
         let spacing = (self.theme.spacing / 10.0).ceil();
         let border_size = self.theme.border.unwrap_or(0.0);
 
         let mut container_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            back_color: Some(self.theme.colors.back2),
-            ..Default::default()
+            back_color: self.theme.colors.back2,
+            ..self.props.placement.clone().into_style()
         };
 
         let mut upright_style = BinStyle {
-            position: Some(BinPosition::Parent),
             ..Default::default()
         };
 
         let mut downleft_style = BinStyle {
-            position: Some(BinPosition::Parent),
             ..Default::default()
         };
 
         let mut confine_style = BinStyle {
-            position: Some(BinPosition::Parent),
             ..Default::default()
         };
 
         let mut bar_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            back_color: Some(self.theme.colors.accent1),
+            position: Position::Anchor,
+            back_color: self.theme.colors.accent1,
             ..Default::default()
         };
 
         match self.props.axis {
             ScrollAxis::X => {
-                container_style.pos_from_b = Some(0.0);
-                container_style.pos_from_l = Some(0.0);
-                container_style.pos_from_r = Some(0.0);
-                container_style.height = Some(size);
+                upright_style.pos_from_t = Pixels(0.0);
+                upright_style.pos_from_b = Pixels(0.0);
+                upright_style.pos_from_r = Pixels(0.0);
+                upright_style.width = PctOfHeight(100.0);
+                upright_style.user_vertexes = vec![(
+                    ImageKey::INVALID,
+                    right_symbol_verts(10.0, self.theme.colors.border1),
+                )];
 
-                upright_style.pos_from_t = Some(0.0);
-                upright_style.pos_from_b = Some(0.0);
-                upright_style.pos_from_r = Some(0.0);
-                upright_style.width = Some(size);
-                upright_style.custom_verts =
-                    right_symbol_verts(size, spacing, self.theme.colors.border1);
+                downleft_style.pos_from_t = Pixels(0.0);
+                downleft_style.pos_from_b = Pixels(0.0);
+                downleft_style.pos_from_l = Pixels(0.0);
+                downleft_style.width = PctOfHeight(100.0);
+                downleft_style.user_vertexes = vec![(
+                    ImageKey::INVALID,
+                    left_symbol_verts(10.0, self.theme.colors.border1),
+                )];
 
-                downleft_style.pos_from_t = Some(0.0);
-                downleft_style.pos_from_b = Some(0.0);
-                downleft_style.pos_from_l = Some(0.0);
-                downleft_style.width = Some(size);
-                downleft_style.custom_verts =
-                    left_symbol_verts(size, spacing, self.theme.colors.border1);
+                confine_style.pos_from_t = Pixels(spacing);
+                confine_style.pos_from_b = Pixels(spacing);
+                confine_style.pos_from_l = PctOfHeightOffset(100.0, border_size);
+                confine_style.pos_from_r = PctOfHeightOffset(100.0, border_size);
 
-                confine_style.pos_from_t = Some(spacing);
-                confine_style.pos_from_b = Some(spacing);
-                confine_style.pos_from_l = Some(size + border_size);
-                confine_style.pos_from_r = Some(size + border_size);
-                confine_style.overflow_x = Some(true);
-
-                bar_style.pos_from_t = Some(0.0);
-                bar_style.pos_from_b = Some(0.0);
-                bar_style.pos_from_l_pct = Some(0.0);
-                bar_style.width_pct = Some(100.0);
+                bar_style.pos_from_t = Pixels(0.0);
+                bar_style.pos_from_b = Pixels(0.0);
+                bar_style.pos_from_l = Percent(0.0);
+                bar_style.width = Percent(100.0);
             },
             ScrollAxis::Y => {
-                container_style.pos_from_t = Some(0.0);
-                container_style.pos_from_b = Some(0.0);
-                container_style.pos_from_r = Some(0.0);
-                container_style.width = Some(size);
+                upright_style.pos_from_t = Pixels(0.0);
+                upright_style.pos_from_l = Pixels(0.0);
+                upright_style.pos_from_r = Pixels(0.0);
+                upright_style.height = PctOfWidth(100.0);
+                upright_style.user_vertexes = vec![(
+                    ImageKey::INVALID,
+                    up_symbol_verts(10.0, self.theme.colors.border1),
+                )];
 
-                upright_style.pos_from_t = Some(0.0);
-                upright_style.pos_from_l = Some(0.0);
-                upright_style.pos_from_r = Some(0.0);
-                upright_style.height = Some(size);
-                upright_style.custom_verts =
-                    up_symbol_verts(size, spacing, self.theme.colors.border1);
+                downleft_style.pos_from_b = Pixels(0.0);
+                downleft_style.pos_from_l = Pixels(0.0);
+                downleft_style.pos_from_r = Pixels(0.0);
+                downleft_style.height = PctOfWidth(100.0);
+                downleft_style.user_vertexes = vec![(
+                    ImageKey::INVALID,
+                    down_symbol_verts(10.0, self.theme.colors.border1),
+                )];
 
-                downleft_style.pos_from_b = Some(0.0);
-                downleft_style.pos_from_l = Some(0.0);
-                downleft_style.pos_from_r = Some(0.0);
-                downleft_style.height = Some(size);
-                downleft_style.custom_verts =
-                    down_symbol_verts(size, spacing, self.theme.colors.border1);
+                confine_style.pos_from_t = PctOfWidthOffset(100.0, border_size);
+                confine_style.pos_from_b = PctOfWidthOffset(100.0, border_size);
+                confine_style.pos_from_l = Pixels(spacing);
+                confine_style.pos_from_r = Pixels(spacing);
 
-                confine_style.pos_from_t = Some(size + border_size);
-                confine_style.pos_from_b = Some(size + border_size);
-                confine_style.pos_from_l = Some(spacing);
-                confine_style.pos_from_r = Some(spacing);
-                confine_style.overflow_y = Some(true);
-
-                bar_style.pos_from_t_pct = Some(0.0);
-                bar_style.pos_from_l = Some(0.0);
-                bar_style.pos_from_r = Some(0.0);
-                bar_style.height_pct = Some(100.0);
+                bar_style.pos_from_t = Percent(0.0);
+                bar_style.pos_from_l = Pixels(0.0);
+                bar_style.pos_from_r = Pixels(0.0);
+                bar_style.height = Percent(100.0);
             },
         }
 
         if let Some(border_size) = self.theme.border {
-            bar_style.border_size_t = Some(border_size);
-            bar_style.border_size_b = Some(border_size);
-            bar_style.border_size_l = Some(border_size);
-            bar_style.border_size_r = Some(border_size);
-            bar_style.border_color_t = Some(self.theme.colors.border3);
-            bar_style.border_color_b = Some(self.theme.colors.border3);
-            bar_style.border_color_l = Some(self.theme.colors.border3);
-            bar_style.border_color_r = Some(self.theme.colors.border3);
+            bar_style.border_size_t = Pixels(border_size);
+            bar_style.border_size_b = Pixels(border_size);
+            bar_style.border_size_l = Pixels(border_size);
+            bar_style.border_size_r = Pixels(border_size);
+            bar_style.border_color_t = self.theme.colors.border3;
+            bar_style.border_color_b = self.theme.colors.border3;
+            bar_style.border_color_l = self.theme.colors.border3;
+            bar_style.border_color_r = self.theme.colors.border3;
 
-            match self.props.axis {
-                ScrollAxis::X => {
-                    container_style.border_size_t = Some(border_size);
-                    container_style.border_color_t = Some(self.theme.colors.border1);
-                },
-                ScrollAxis::Y => {
-                    container_style.border_size_l = Some(border_size);
-                    container_style.border_color_l = Some(self.theme.colors.border1);
-                },
+            if !container_style.border_size_t.is_defined() {
+                container_style.border_size_t = Pixels(border_size);
+                container_style.border_color_t = self.theme.colors.border1;
+            }
+
+            if !container_style.border_size_b.is_defined() {
+                container_style.border_size_b = Pixels(border_size);
+                container_style.border_color_b = self.theme.colors.border1;
+            }
+
+            if !container_style.border_size_l.is_defined() {
+                container_style.border_size_l = Pixels(border_size);
+                container_style.border_color_l = self.theme.colors.border1;
+            }
+
+            if !container_style.border_size_r.is_defined() {
+                container_style.border_size_r = Pixels(border_size);
+                container_style.border_color_r = self.theme.colors.border1;
             }
         }
 
         if self.theme.roundness.is_some() {
-            let bar_size_1_2 = (size - (spacing * 2.0)) / 2.0;
-            bar_style.border_radius_tl = Some(bar_size_1_2);
-            bar_style.border_radius_tr = Some(bar_size_1_2);
-            bar_style.border_radius_bl = Some(bar_size_1_2);
-            bar_style.border_radius_br = Some(bar_size_1_2);
+            match self.props.axis {
+                ScrollAxis::X => {
+                    bar_style.border_radius_tl = PctOfHeight(50.0);
+                    bar_style.border_radius_tr = PctOfHeight(50.0);
+                    bar_style.border_radius_bl = PctOfHeight(50.0);
+                    bar_style.border_radius_br = PctOfHeight(50.0);
+                },
+                ScrollAxis::Y => {
+                    bar_style.border_radius_tl = PctOfWidth(50.0);
+                    bar_style.border_radius_tr = PctOfWidth(50.0);
+                    bar_style.border_radius_bl = PctOfWidth(50.0);
+                    bar_style.border_radius_br = PctOfWidth(50.0);
+                },
+            }
         }
 
         Bin::style_update_batch([
@@ -983,41 +1030,60 @@ impl ScrollBar {
     }
 }
 
-fn up_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
-    const UNIT_POINTS: [[f32; 2]; 3] = [[0.5, 0.25], [0.0, 0.75], [1.0, 0.75]];
-    symbol_verts(target_size, spacing, color, &UNIT_POINTS)
+fn up_symbol_verts(space_pct: f32, color: Color) -> Vec<BinVertex> {
+    symbol_verts(
+        color,
+        &[
+            [50.0, 25.0 + (space_pct / 2.0)],
+            [space_pct, 75.0 - (space_pct / 2.0)],
+            [100.0 - space_pct, 75.0],
+        ],
+    )
 }
 
-pub(crate) fn down_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
-    const UNIT_POINTS: [[f32; 2]; 3] = [[0.0, 0.25], [1.0, 0.25], [0.5, 0.75]];
-    symbol_verts(target_size, spacing, color, &UNIT_POINTS)
+pub(crate) fn down_symbol_verts(space_pct: f32, color: Color) -> Vec<BinVertex> {
+    symbol_verts(
+        color,
+        &[
+            [space_pct, 25.0 + (space_pct / 2.0)],
+            [100.0 - space_pct, 25.0 + (space_pct / 2.0)],
+            [50.0, 75.0 - (space_pct / 2.0)],
+        ],
+    )
 }
 
-fn left_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
-    const UNIT_POINTS: [[f32; 2]; 3] = [[0.75, 0.25], [0.25, 0.5], [0.75, 0.75]];
-    symbol_verts(target_size, spacing, color, &UNIT_POINTS)
+fn left_symbol_verts(space_pct: f32, color: Color) -> Vec<BinVertex> {
+    symbol_verts(
+        color,
+        &[
+            [75.0 - (space_pct / 2.0), space_pct],
+            [25.0 + (space_pct / 2.0), 50.0],
+            [75.0 - (space_pct / 2.0), 100.0 - space_pct],
+        ],
+    )
 }
 
-fn right_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
-    const UNIT_POINTS: [[f32; 2]; 3] = [[0.25, 0.25], [0.25, 0.75], [0.75, 0.5]];
-    symbol_verts(target_size, spacing, color, &UNIT_POINTS)
+fn right_symbol_verts(space_pct: f32, color: Color) -> Vec<BinVertex> {
+    symbol_verts(
+        color,
+        &[
+            [25.0 + (space_pct / 2.0), space_pct],
+            [25.0 + (space_pct / 2.0), 100.0 - space_pct],
+            [75.0 - (space_pct / 2.0), 50.0],
+        ],
+    )
 }
 
-fn symbol_verts(
-    target_size: f32,
-    spacing: f32,
-    color: Color,
-    unit_points: &[[f32; 2]; 3],
-) -> Vec<BinVert> {
-    let size = target_size - (spacing * 2.0);
-    let mut verts = Vec::with_capacity(3);
-
-    for [x, y] in unit_points.iter() {
-        verts.push(BinVert {
-            position: ((*x * size) + spacing, (*y * size) + spacing, 0),
-            color,
-        });
-    }
-
-    verts
+fn symbol_verts(color: Color, unit_points: &[[f32; 2]; 3]) -> Vec<BinVertex> {
+    unit_points
+        .into_iter()
+        .map(|[x, y]| {
+            BinVertex {
+                x: Percent(*x),
+                y: Percent(*y),
+                color,
+                ..Default::default()
+            }
+        })
+        .collect()
 }

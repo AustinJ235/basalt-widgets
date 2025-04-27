@@ -1,12 +1,14 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
+use basalt::image::ImageKey;
 use basalt::input::MouseButton;
-use basalt::interface::{Bin, BinPosition, BinStyle, BinVert, Color};
+use basalt::interface::UnitValue::{Percent, Pixels};
+use basalt::interface::{Bin, BinStyle, BinVertex, Color, Position, Visibility};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`CheckBox`]
 pub struct CheckBoxBuilder<'a, C, T> {
@@ -18,6 +20,16 @@ pub struct CheckBoxBuilder<'a, C, T> {
 
 struct Properties<T> {
     value: T,
+    placement: WidgetPlacement,
+}
+
+impl<T> Properties<T> {
+    fn new(value: T, placement: WidgetPlacement) -> Self {
+        Self {
+            value,
+            placement,
+        }
+    }
 }
 
 impl<'a, C, T> CheckBoxBuilder<'a, C, T>
@@ -25,12 +37,16 @@ where
     C: WidgetContainer,
     T: Send + Sync + 'static,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>, value: T) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>, value: T) -> Self {
         Self {
-            widget: builder,
-            props: Properties {
+            props: Properties::new(
                 value,
-            },
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| CheckBox::<()>::default_placement(&builder.theme)),
+            ),
+            widget: builder,
             selected: false,
             on_change: Vec::new(),
         }
@@ -183,9 +199,9 @@ impl<T> CheckBox<T> {
         let mut fill_style = self.fill.style_copy();
 
         if selected {
-            fill_style.hidden = None;
+            fill_style.visibility = Visibility::Inheirt;
         } else {
-            fill_style.hidden = Some(true);
+            fill_style.visibility = Visibility::Hide;
         }
 
         self.fill.style_update(fill_style).expect_valid();
@@ -197,59 +213,59 @@ impl<T> CheckBox<T> {
         }
     }
 
-    fn style_update(&self) {
-        let width = self.theme.base_size; // TODO: Configurable
-        let width_1_2 = width / 2.0;
-        let check_space = (width_1_2 / 12.0).round().max(1.0);
-
-        let mut container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
-            width: Some(width),
-            height: Some(width),
-            back_color: Some(self.theme.colors.back2),
-            border_radius_tl: Some(width_1_2),
-            border_radius_tr: Some(width_1_2),
-            border_radius_bl: Some(width_1_2),
-            border_radius_br: Some(width_1_2),
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(theme.base_size),
+            height: Pixels(theme.base_size),
             ..Default::default()
+        }
+    }
+
+    fn style_update(&self) {
+        let mut container_style = BinStyle {
+            back_color: self.theme.colors.back2,
+            ..self.props.placement.clone().into_style()
         };
 
         let mut fill_style = BinStyle {
-            hidden: Some(true),
-            position: Some(BinPosition::Parent),
-            pos_from_t: Some(0.0),
-            pos_from_b: Some(0.0),
-            pos_from_l: Some(0.0),
-            pos_from_r: Some(0.0),
-            custom_verts: check_symbol_verts(width, check_space, self.theme.colors.accent1),
+            visibility: Visibility::Hide,
+            pos_from_t: Pixels(0.0),
+            pos_from_b: Pixels(0.0),
+            pos_from_l: Pixels(0.0),
+            pos_from_r: Pixels(0.0),
+            user_vertexes: vec![(
+                ImageKey::INVALID,
+                check_symbol_verts(self.theme.colors.accent1),
+            )],
             ..Default::default()
         };
 
         if let Some(border_size) = self.theme.border {
-            container_style.border_size_t = Some(border_size);
-            container_style.border_size_b = Some(border_size);
-            container_style.border_size_l = Some(border_size);
-            container_style.border_size_r = Some(border_size);
-            container_style.border_color_t = Some(self.theme.colors.border1);
-            container_style.border_color_b = Some(self.theme.colors.border1);
-            container_style.border_color_l = Some(self.theme.colors.border1);
-            container_style.border_color_r = Some(self.theme.colors.border1);
+            container_style.border_size_t = Pixels(border_size);
+            container_style.border_size_b = Pixels(border_size);
+            container_style.border_size_l = Pixels(border_size);
+            container_style.border_size_r = Pixels(border_size);
+            container_style.border_color_t = self.theme.colors.border1;
+            container_style.border_color_b = self.theme.colors.border1;
+            container_style.border_color_l = self.theme.colors.border1;
+            container_style.border_color_r = self.theme.colors.border1;
         }
 
-        if let Some(roundness) = self.theme.roundness {
-            let radius = roundness.min(width_1_2);
-            container_style.border_radius_tl = Some(radius);
-            container_style.border_radius_tr = Some(radius);
-            container_style.border_radius_bl = Some(radius);
-            container_style.border_radius_br = Some(radius);
+        if let Some(radius) = self.theme.roundness {
+            container_style.border_radius_tl = Pixels(radius);
+            container_style.border_radius_tr = Pixels(radius);
+            container_style.border_radius_bl = Pixels(radius);
+            container_style.border_radius_br = Pixels(radius);
         }
 
         if self.is_selected() {
-            fill_style.hidden = None;
+            fill_style.visibility = Visibility::Inheirt;
         }
 
         Bin::style_update_batch([(&self.container, container_style), (&self.fill, fill_style)]);
@@ -266,7 +282,7 @@ where
     }
 }
 
-fn check_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVert> {
+fn check_symbol_verts(color: Color) -> Vec<BinVertex> {
     const UNIT_POS: [[f32; 2]; 6] = [
         [0.912, 0.131],
         [1.000, 0.218],
@@ -276,17 +292,14 @@ fn check_symbol_verts(target_size: f32, spacing: f32, color: Color) -> Vec<BinVe
         [0.349, 0.868],
     ];
 
-    let size = target_size - (spacing * 2.0);
     let mut verts = Vec::with_capacity(12);
 
     for i in [5, 1, 0, 5, 0, 4, 5, 4, 2, 5, 2, 3] {
-        verts.push(BinVert {
-            position: (
-                (UNIT_POS[i][0] * size) + spacing,
-                (UNIT_POS[i][1] * size) + spacing,
-                0,
-            ),
+        verts.push(BinVertex {
+            x: Percent((UNIT_POS[i][0] * 90.0) + 5.0),
+            y: Percent((UNIT_POS[i][1] * 90.0) + 5.0),
             color,
+            ..Default::default()
         });
     }
 

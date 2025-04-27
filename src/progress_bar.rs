@@ -2,11 +2,12 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use basalt::input::MouseButton;
-use basalt::interface::{Bin, BinPosition, BinStyle};
+use basalt::interface::UnitValue::{Percent, Pixels};
+use basalt::interface::{Bin, BinStyle, Position};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`ProgressBar`].
 pub struct ProgressBarBuilder<'a, C> {
@@ -15,21 +16,33 @@ pub struct ProgressBarBuilder<'a, C> {
     on_press: Vec<Box<dyn FnMut(&Arc<ProgressBar>, f32) + Send + 'static>>,
 }
 
-#[derive(Default)]
 struct Properties {
     pct: f32,
-    width: Option<f32>,
-    height: Option<f32>,
+    placement: WidgetPlacement,
+}
+
+impl Properties {
+    fn new(placement: WidgetPlacement) -> Self {
+        Self {
+            pct: 0.0,
+            placement,
+        }
+    }
 }
 
 impl<'a, C> ProgressBarBuilder<'a, C>
 where
     C: WidgetContainer,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>) -> Self {
         Self {
+            props: Properties::new(
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| ProgressBar::default_placement(&builder.theme)),
+            ),
             widget: builder,
-            props: Default::default(),
             on_press: Vec::new(),
         }
     }
@@ -39,18 +52,6 @@ where
     /// **Note**: When this isn't used the percent will be `0.0`.
     pub fn set_pct(mut self, pct: f32) -> Self {
         self.props.pct = pct.clamp(0.0, 100.0);
-        self
-    }
-
-    /// **Temporary**
-    pub fn width(mut self, width: f32) -> Self {
-        self.props.width = Some(width);
-        self
-    }
-
-    /// **Temporary**
-    pub fn height(mut self, height: f32) -> Self {
-        self.props.height = Some(height);
         self
     }
 
@@ -143,7 +144,7 @@ impl ProgressBar {
 
         self.fill
             .style_update(BinStyle {
-                width_pct: Some(pct),
+                width: Percent(pct),
                 ..self.fill.style_copy()
             })
             .expect_valid();
@@ -185,63 +186,57 @@ impl ProgressBar {
         }
     }
 
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(theme.base_size * 4.0),
+            height: Pixels(theme.base_size),
+            ..Default::default()
+        }
+    }
+
     fn style_update(self: &Arc<Self>) {
-        let widget_height = match self.props.height {
-            Some(height) => height,
-            None => self.theme.base_size,
-        };
-
-        let widget_width = match self.props.width {
-            Some(width) => width,
-            None => widget_height * 4.0,
-        };
-
-        let widget_height_1_2 = widget_height / 2.0;
         let pct = *self.state.lock().pct.borrow();
 
         let mut container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            height: Some(widget_height),
-            width: Some(widget_width),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
-            back_color: Some(self.theme.colors.back2),
-            ..Default::default()
+            back_color: self.theme.colors.back2,
+            ..self.props.placement.clone().into_style()
         };
 
         let mut fill_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            pos_from_t: Some(0.0),
-            pos_from_b: Some(0.0),
-            pos_from_l: Some(0.0),
-            width_pct: Some(pct),
-            back_color: Some(self.theme.colors.accent1),
+            pos_from_t: Pixels(0.0),
+            pos_from_b: Pixels(0.0),
+            pos_from_l: Pixels(0.0),
+            width: Percent(pct),
+            back_color: self.theme.colors.accent1,
             ..Default::default()
         };
 
         if let Some(border_size) = self.theme.border {
-            container_style.border_size_t = Some(border_size);
-            container_style.border_size_b = Some(border_size);
-            container_style.border_size_l = Some(border_size);
-            container_style.border_size_r = Some(border_size);
-            container_style.border_color_t = Some(self.theme.colors.border1);
-            container_style.border_color_b = Some(self.theme.colors.border1);
-            container_style.border_color_l = Some(self.theme.colors.border1);
-            container_style.border_color_r = Some(self.theme.colors.border1);
+            container_style.border_size_t = Pixels(border_size);
+            container_style.border_size_b = Pixels(border_size);
+            container_style.border_size_l = Pixels(border_size);
+            container_style.border_size_r = Pixels(border_size);
+            container_style.border_color_t = self.theme.colors.border1;
+            container_style.border_color_b = self.theme.colors.border1;
+            container_style.border_color_l = self.theme.colors.border1;
+            container_style.border_color_r = self.theme.colors.border1;
         }
 
-        if let Some(roundness) = self.theme.roundness {
-            let radius = widget_height_1_2.min(roundness);
-            container_style.border_radius_tl = Some(radius);
-            container_style.border_radius_tr = Some(radius);
-            container_style.border_radius_bl = Some(radius);
-            container_style.border_radius_br = Some(radius);
-            fill_style.border_radius_tl = Some(radius);
-            fill_style.border_radius_tr = Some(radius);
-            fill_style.border_radius_bl = Some(radius);
-            fill_style.border_radius_br = Some(radius);
+        if let Some(radius) = self.theme.roundness {
+            container_style.border_radius_tl = Pixels(radius);
+            container_style.border_radius_tr = Pixels(radius);
+            container_style.border_radius_bl = Pixels(radius);
+            container_style.border_radius_br = Pixels(radius);
+            fill_style.border_radius_tl = Pixels(radius);
+            fill_style.border_radius_tr = Pixels(radius);
+            fill_style.border_radius_bl = Pixels(radius);
+            fill_style.border_radius_br = Pixels(radius);
         }
 
         Bin::style_update_batch([(&self.container, container_style), (&self.fill, fill_style)]);

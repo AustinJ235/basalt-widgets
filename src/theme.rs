@@ -1,4 +1,4 @@
-use basalt::interface::{Color, FontWeight};
+use basalt::interface::{Color, FontFamily, FontWeight};
 
 /// The theme used for widgets.
 ///
@@ -8,7 +8,7 @@ pub struct Theme {
     pub spacing: f32,
     pub text_height: f32,
     pub base_size: f32,
-    pub font_family: String,
+    pub font_family: FontFamily,
     pub font_weight: FontWeight,
     pub border: Option<f32>,
     pub roundness: Option<f32>,
@@ -22,7 +22,7 @@ impl Theme {
             spacing: 12.0,
             text_height: 14.0,
             base_size: 20.0,
-            font_family: String::from("Sans Serif"),
+            font_family: FontFamily::Serif,
             font_weight: FontWeight::Normal,
             border: Some(1.0),
             roundness: Some(3.0),

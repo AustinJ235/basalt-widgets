@@ -3,13 +3,14 @@ use std::sync::Arc;
 use std::sync::atomic::{self, AtomicBool};
 
 use basalt::input::{MouseButton, WindowState};
+use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{
-    Bin, BinPosition, BinStyle, Color, TextHoriAlign, TextVertAlign, TextWrap,
+    Bin, BinStyle, Color, Position, TextAttrs, TextBody, TextHoriAlign, TextVertAlign, TextWrap,
 };
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`Button`]
 pub struct ButtonBuilder<'a, C> {
@@ -21,19 +22,31 @@ pub struct ButtonBuilder<'a, C> {
 #[derive(Default)]
 struct Properties {
     text: String,
-    width: Option<f32>,
-    height: Option<f32>,
-    text_height: Option<f32>,
+    placement: WidgetPlacement,
+}
+
+impl Properties {
+    fn new(placement: WidgetPlacement) -> Self {
+        Self {
+            text: String::new(),
+            placement,
+        }
+    }
 }
 
 impl<'a, C> ButtonBuilder<'a, C>
 where
     C: WidgetContainer,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>) -> Self {
         Self {
+            props: Properties::new(
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| Button::default_placement(&builder.theme)),
+            ),
             widget: builder,
-            props: Default::default(),
             on_press: Vec::new(),
         }
     }
@@ -44,24 +57,6 @@ where
         T: Into<String>,
     {
         self.props.text = text.into();
-        self
-    }
-
-    /// **Temporary**
-    pub fn width(mut self, width: f32) -> Self {
-        self.props.width = Some(width);
-        self
-    }
-
-    /// **Temporary**
-    pub fn height(mut self, height: f32) -> Self {
-        self.props.height = Some(height);
-        self
-    }
-
-    /// **Temporary**
-    pub fn text_height(mut self, text_height: f32) -> Self {
-        self.props.text_height = Some(text_height);
         self
     }
 
@@ -155,73 +150,58 @@ impl Button {
             .push(Box::new(on_press));
     }
 
-    fn style_update(&self) {
-        let text_height = self.props.text_height.unwrap_or(self.theme.text_height);
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        let height = theme.spacing + theme.base_size;
+        let width = height * 2.0;
 
-        let mut container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
-            back_color: Some(self.theme.colors.back3),
-            text: self.props.text.clone(),
-            text_height: Some(text_height),
-            text_color: Some(self.theme.colors.text1a),
-            text_hori_align: Some(TextHoriAlign::Center),
-            text_vert_align: Some(TextVertAlign::Center),
-            text_wrap: Some(TextWrap::None),
-            font_family: Some(self.theme.font_family.clone()),
-            font_weight: Some(self.theme.font_weight),
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(width),
+            height: Pixels(height),
             ..Default::default()
+        }
+    }
+
+    fn style_update(&self) {
+        let mut container_style = BinStyle {
+            back_color: self.theme.colors.back3,
+            text_body: TextBody {
+                hori_align: TextHoriAlign::Center,
+                vert_align: TextVertAlign::Center,
+                text_wrap: TextWrap::None,
+                base_attrs: TextAttrs {
+                    height: Pixels(self.theme.text_height),
+                    color: self.theme.colors.text1a,
+                    font_family: self.theme.font_family.clone(),
+                    font_weight: self.theme.font_weight,
+                    ..Default::default()
+                },
+                ..TextBody::from(self.props.text.clone())
+            },
+            ..self.props.placement.clone().into_style()
         };
 
-        match self.props.width {
-            Some(width) => {
-                container_style.width = Some(width);
-            },
-            None => {
-                container_style.width = Some(0.0);
-                container_style.hidden = Some(true);
-                let cb_spacing = self.theme.spacing;
-
-                self.container.on_update_once(move |container, _| {
-                    container
-                        .style_update(BinStyle {
-                            width: Some((cb_spacing * 2.0) + container.calc_hori_overflow()),
-                            hidden: None,
-                            ..container.style_copy()
-                        })
-                        .expect_valid();
-                });
-            },
-        }
-
-        match self.props.height {
-            Some(height) => {
-                container_style.height = Some(height);
-            },
-            None => {
-                container_style.height = Some((self.theme.spacing * 2.0) + self.theme.spacing);
-            },
-        }
-
         if let Some(border_size) = self.theme.border {
-            container_style.border_size_t = Some(border_size);
-            container_style.border_size_b = Some(border_size);
-            container_style.border_size_l = Some(border_size);
-            container_style.border_size_r = Some(border_size);
-            container_style.border_color_t = Some(self.theme.colors.border1);
-            container_style.border_color_b = Some(self.theme.colors.border1);
-            container_style.border_color_l = Some(self.theme.colors.border1);
-            container_style.border_color_r = Some(self.theme.colors.border1);
+            container_style.border_size_t = Pixels(border_size);
+            container_style.border_size_b = Pixels(border_size);
+            container_style.border_size_l = Pixels(border_size);
+            container_style.border_size_r = Pixels(border_size);
+            container_style.border_color_t = self.theme.colors.border1;
+            container_style.border_color_b = self.theme.colors.border1;
+            container_style.border_color_l = self.theme.colors.border1;
+            container_style.border_color_r = self.theme.colors.border1;
         }
 
         if let Some(border_radius) = self.theme.roundness {
-            container_style.border_radius_tl = Some(border_radius);
-            container_style.border_radius_tr = Some(border_radius);
-            container_style.border_radius_bl = Some(border_radius);
-            container_style.border_radius_br = Some(border_radius);
+            container_style.border_radius_tl = Pixels(border_radius);
+            container_style.border_radius_tr = Pixels(border_radius);
+            container_style.border_radius_bl = Pixels(border_radius);
+            container_style.border_radius_br = Pixels(border_radius);
         }
 
         self.container.style_update(container_style).expect_valid();
@@ -262,18 +242,19 @@ where
             let mut style = button.style_copy();
 
             if let Some(h_text_clr) = colors.h_text_clr {
-                style.text_color = Some(h_text_clr);
+                style.text_body.base_attrs.color = h_text_clr;
             }
 
             if let Some(h_back_clr) = colors.h_back_clr {
-                style.back_color = Some(h_back_clr);
+                style.back_color = h_back_clr;
             }
 
             if let Some(h_vert_clr) = colors.h_vert_clr {
-                style
-                    .custom_verts
-                    .iter_mut()
-                    .for_each(|vertex| vertex.color = h_vert_clr);
+                style.user_vertexes.iter_mut().for_each(|(_, vertexes)| {
+                    vertexes
+                        .iter_mut()
+                        .for_each(|vertex| vertex.color = h_vert_clr)
+                });
             }
 
             button.style_update(style).expect_valid();
@@ -297,18 +278,19 @@ where
             let mut style = button.style_copy();
 
             if let Some(text_clr) = colors.text_clr {
-                style.text_color = Some(text_clr);
+                style.text_body.base_attrs.color = text_clr;
             }
 
             if let Some(back_clr) = colors.back_clr {
-                style.back_color = Some(back_clr);
+                style.back_color = back_clr;
             }
 
             if let Some(vert_clr) = colors.vert_clr {
-                style
-                    .custom_verts
-                    .iter_mut()
-                    .for_each(|vertex| vertex.color = vert_clr);
+                style.user_vertexes.iter_mut().for_each(|(_, vertexes)| {
+                    vertexes
+                        .iter_mut()
+                        .for_each(|vertex| vertex.color = vert_clr)
+                });
             }
 
             button.style_update(style).expect_valid();
@@ -328,18 +310,19 @@ where
             let mut style = button.style_copy();
 
             if let Some(p_text_clr) = colors.p_text_clr {
-                style.text_color = Some(p_text_clr);
+                style.text_body.base_attrs.color = p_text_clr;
             }
 
             if let Some(p_back_clr) = colors.p_back_clr {
-                style.back_color = Some(p_back_clr);
+                style.back_color = p_back_clr;
             }
 
             if let Some(p_vert_clr) = colors.p_vert_clr {
-                style
-                    .custom_verts
-                    .iter_mut()
-                    .for_each(|vertex| vertex.color = p_vert_clr);
+                style.user_vertexes.iter_mut().for_each(|(_, vertexes)| {
+                    vertexes
+                        .iter_mut()
+                        .for_each(|vertex| vertex.color = p_vert_clr)
+                });
             }
 
             button.style_update(style).expect_valid();
@@ -364,18 +347,19 @@ where
             let mut style = button.style_copy();
 
             if let Some(h_text_clr) = colors.h_text_clr {
-                style.text_color = Some(h_text_clr);
+                style.text_body.base_attrs.color = h_text_clr;
             }
 
             if let Some(h_back_clr) = colors.h_back_clr {
-                style.back_color = Some(h_back_clr);
+                style.back_color = h_back_clr;
             }
 
             if let Some(h_vert_clr) = colors.h_vert_clr {
-                style
-                    .custom_verts
-                    .iter_mut()
-                    .for_each(|vertex| vertex.color = h_vert_clr);
+                style.user_vertexes.iter_mut().for_each(|(_, vertexes)| {
+                    vertexes
+                        .iter_mut()
+                        .for_each(|vertex| vertex.color = h_vert_clr)
+                });
             }
 
             button.style_update(style).expect_valid();
@@ -383,18 +367,19 @@ where
             let mut style = button.style_copy();
 
             if let Some(text_clr) = colors.text_clr {
-                style.text_color = Some(text_clr);
+                style.text_body.base_attrs.color = text_clr;
             }
 
             if let Some(back_clr) = colors.back_clr {
-                style.back_color = Some(back_clr);
+                style.back_color = back_clr;
             }
 
             if let Some(vert_clr) = colors.vert_clr {
-                style
-                    .custom_verts
-                    .iter_mut()
-                    .for_each(|vertex| vertex.color = vert_clr);
+                style.user_vertexes.iter_mut().for_each(|(_, vertexes)| {
+                    vertexes
+                        .iter_mut()
+                        .for_each(|vertex| vertex.color = vert_clr)
+                });
             }
 
             button.style_update(style).expect_valid();

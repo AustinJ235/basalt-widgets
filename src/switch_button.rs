@@ -2,11 +2,12 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use basalt::input::MouseButton;
-use basalt::interface::{Bin, BinPosition, BinStyle};
+use basalt::interface::UnitValue::{PctOfHeight, PctOffset, Percent, Pixels};
+use basalt::interface::{Bin, BinStyle, Position};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`SwitchButton`]
 pub struct SwitchButtonBuilder<'a, C> {
@@ -18,18 +19,31 @@ pub struct SwitchButtonBuilder<'a, C> {
 #[derive(Default)]
 struct Properties {
     enabled: bool,
-    width: Option<f32>,
-    height: Option<f32>,
+    placement: WidgetPlacement,
+}
+
+impl Properties {
+    fn new(placement: WidgetPlacement) -> Self {
+        Self {
+            enabled: false,
+            placement,
+        }
+    }
 }
 
 impl<'a, C> SwitchButtonBuilder<'a, C>
 where
     C: WidgetContainer,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>) -> Self {
         Self {
+            props: Properties::new(
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| SwitchButton::default_placement(&builder.theme)),
+            ),
             widget: builder,
-            props: Default::default(),
             on_change: Vec::new(),
         }
     }
@@ -39,18 +53,6 @@ where
     /// **Note**: When this isn't used the initial value will be `false`.
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.props.enabled = enabled;
-        self
-    }
-
-    /// **Temporary**
-    pub fn width(mut self, width: f32) -> Self {
-        self.props.width = Some(width);
-        self
-    }
-
-    /// **Temporary**
-    pub fn height(mut self, height: f32) -> Self {
-        self.props.height = Some(height);
         self
     }
 
@@ -143,25 +145,20 @@ impl SwitchButton {
         let state = self.state.lock();
         *state.enabled.borrow_mut() = enabled;
 
-        let widget_height = match self.props.height {
-            Some(height) => height,
-            None => self.theme.base_size,
-        };
-
         if enabled {
             Bin::style_update_batch([
                 (
                     &self.container,
                     BinStyle {
-                        back_color: Some(self.theme.colors.accent1),
+                        back_color: self.theme.colors.accent1,
                         ..self.container.style_copy()
                     },
                 ),
                 (
                     &self.knob,
                     BinStyle {
-                        pos_from_r: Some(widget_height * 0.1),
-                        pos_from_l: None,
+                        pos_from_r: PctOffset(10.0, -self.theme.border.unwrap_or(0.0)),
+                        pos_from_l: Default::default(),
                         ..self.knob.style_copy()
                     },
                 ),
@@ -171,15 +168,15 @@ impl SwitchButton {
                 (
                     &self.container,
                     BinStyle {
-                        back_color: Some(self.theme.colors.back3),
+                        back_color: self.theme.colors.back3,
                         ..self.container.style_copy()
                     },
                 ),
                 (
                     &self.knob,
                     BinStyle {
-                        pos_from_l: Some(widget_height * 0.1),
-                        pos_from_r: None,
+                        pos_from_l: PctOffset(10.0, -self.theme.border.unwrap_or(0.0)),
+                        pos_from_r: Default::default(),
                         ..self.knob.style_copy()
                     },
                 ),
@@ -223,75 +220,72 @@ impl SwitchButton {
             .push(Box::new(on_change));
     }
 
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        let height = theme.base_size;
+        let width = height * 2.0;
+
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(width),
+            height: Pixels(height),
+            ..Default::default()
+        }
+    }
+
     fn style_update(&self) {
-        let widget_height = match self.props.height {
-            Some(height) => height,
-            None => self.theme.base_size,
-        };
-
-        let widget_width = match self.props.width {
-            Some(width) => width.max(widget_height),
-            None => widget_height * 2.0,
-        };
-
         let enabled = *self.state.lock().enabled.borrow();
 
         let mut container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            height: Some(widget_height),
-            width: Some(widget_width),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
-            border_radius_tl: Some(widget_height / 2.0),
-            border_radius_tr: Some(widget_height / 2.0),
-            border_radius_bl: Some(widget_height / 2.0),
-            border_radius_br: Some(widget_height / 2.0),
-            ..Default::default()
+            border_radius_tl: PctOfHeight(50.0),
+            border_radius_tr: PctOfHeight(50.0),
+            border_radius_bl: PctOfHeight(50.0),
+            border_radius_br: PctOfHeight(50.0),
+            ..self.props.placement.clone().into_style()
         };
 
-        let knob_size = widget_height - (widget_height * 0.2);
-
         let mut knob_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            pos_from_t: Some(widget_height * 0.1),
-            pos_from_b: Some(widget_height * 0.1),
-            width: Some(knob_size),
-            back_color: Some(self.theme.colors.back1),
-            border_radius_tl: Some(knob_size / 2.0),
-            border_radius_tr: Some(knob_size / 2.0),
-            border_radius_bl: Some(knob_size / 2.0),
-            border_radius_br: Some(knob_size / 2.0),
+            pos_from_t: Percent(10.0),
+            pos_from_b: Percent(10.0),
+            width: PctOfHeight(80.0),
+            back_color: self.theme.colors.back1,
+            border_radius_tl: PctOfHeight(50.0),
+            border_radius_tr: PctOfHeight(50.0),
+            border_radius_bl: PctOfHeight(50.0),
+            border_radius_br: PctOfHeight(50.0),
             ..Default::default()
         };
 
         if enabled {
-            container_style.back_color = Some(self.theme.colors.accent1);
-            knob_style.pos_from_r = Some(widget_height * 0.1);
+            container_style.back_color = self.theme.colors.accent1;
+            knob_style.pos_from_r = PctOffset(10.0, -self.theme.border.unwrap_or(0.0));
         } else {
-            container_style.back_color = Some(self.theme.colors.back3);
-            knob_style.pos_from_l = Some(widget_height * 0.1);
+            container_style.back_color = self.theme.colors.back3;
+            knob_style.pos_from_l = PctOffset(10.0, -self.theme.border.unwrap_or(0.0));
         }
 
         if let Some(border_size) = self.theme.border {
-            container_style.border_size_t = Some(border_size);
-            container_style.border_size_b = Some(border_size);
-            container_style.border_size_l = Some(border_size);
-            container_style.border_size_r = Some(border_size);
-            container_style.border_color_t = Some(self.theme.colors.border1);
-            container_style.border_color_b = Some(self.theme.colors.border1);
-            container_style.border_color_l = Some(self.theme.colors.border1);
-            container_style.border_color_r = Some(self.theme.colors.border1);
+            container_style.border_size_t = Pixels(border_size);
+            container_style.border_size_b = Pixels(border_size);
+            container_style.border_size_l = Pixels(border_size);
+            container_style.border_size_r = Pixels(border_size);
+            container_style.border_color_t = self.theme.colors.border1;
+            container_style.border_color_b = self.theme.colors.border1;
+            container_style.border_color_l = self.theme.colors.border1;
+            container_style.border_color_r = self.theme.colors.border1;
 
-            knob_style.border_size_t = Some(border_size);
-            knob_style.border_size_b = Some(border_size);
-            knob_style.border_size_l = Some(border_size);
-            knob_style.border_size_r = Some(border_size);
-            knob_style.border_color_t = Some(self.theme.colors.border3);
-            knob_style.border_color_b = Some(self.theme.colors.border3);
-            knob_style.border_color_l = Some(self.theme.colors.border3);
-            knob_style.border_color_r = Some(self.theme.colors.border3);
+            knob_style.border_size_t = Pixels(border_size);
+            knob_style.border_size_b = Pixels(border_size);
+            knob_style.border_size_l = Pixels(border_size);
+            knob_style.border_size_r = Pixels(border_size);
+            knob_style.border_color_t = self.theme.colors.border3;
+            knob_style.border_color_b = self.theme.colors.border3;
+            knob_style.border_color_l = self.theme.colors.border3;
+            knob_style.border_color_r = self.theme.colors.border3;
         }
 
         Bin::style_update_batch([(&self.container, container_style), (&self.knob, knob_style)]);

@@ -3,16 +3,20 @@ use std::sync::Arc;
 use std::sync::atomic::{self, AtomicBool};
 
 use basalt::input::{MouseButton, Qwerty, WindowState};
-use basalt::interface::{Bin, BinPosition, BinStyle};
+use basalt::interface::UnitValue::{
+    PctOfHeight, PctOfHeightOffset, PctOfWidth, PctOfWidthOffset, Percent, Pixels,
+};
+use basalt::interface::{Bin, BinStyle, Position};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetContainer};
+use crate::{Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`Scaler`]
 pub struct ScalerBuilder<'a, C> {
     widget: WidgetBuilder<'a, C>,
     props: Properties,
+    plmt_is_default: bool,
     on_change: Vec<Box<dyn FnMut(&Arc<Scaler>, f32) + Send + 'static>>,
 }
 
@@ -63,12 +67,11 @@ struct Properties {
     large_step: f32,
     round: ScalerRound,
     orientation: ScalerOrientation,
-    width: Option<f32>,
-    height: Option<f32>,
+    placement: WidgetPlacement,
 }
 
-impl Default for Properties {
-    fn default() -> Self {
+impl Properties {
+    fn new(placement: WidgetPlacement) -> Self {
         Self {
             min: 0.0,
             max: 0.0,
@@ -78,8 +81,7 @@ impl Default for Properties {
             large_step: 1.0,
             round: Default::default(),
             orientation: Default::default(),
-            width: None,
-            height: None,
+            placement,
         }
     }
 }
@@ -89,10 +91,15 @@ impl<'a, C> ScalerBuilder<'a, C>
 where
     C: WidgetContainer,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>) -> Self {
         Self {
+            plmt_is_default: builder.placement.is_none(),
+            props: Properties::new(
+                builder.placement.take().unwrap_or_else(|| {
+                    Scaler::default_placement(&builder.theme, Default::default())
+                }),
+            ),
             widget: builder,
-            props: Default::default(),
             on_change: Vec::new(),
         }
     }
@@ -168,19 +175,11 @@ where
     /// **Note**: When this isn't used the [`ScalerOrientation`] will be
     /// [`Horizontal`](ScalerOrientation::Horizontal).
     pub fn orientation(mut self, orientation: ScalerOrientation) -> Self {
+        if self.plmt_is_default {
+            self.props.placement = Scaler::default_placement(&self.widget.theme, orientation);
+        }
+
         self.props.orientation = orientation;
-        self
-    }
-
-    /// **Temporary**
-    pub fn width(mut self, width: f32) -> Self {
-        self.props.width = Some(width);
-        self
-    }
-
-    /// **Temporary**
-    pub fn height(mut self, height: f32) -> Self {
-        self.props.height = Some(height);
         self
     }
 
@@ -444,10 +443,10 @@ impl Scaler {
 
         match self.props.orientation {
             ScalerOrientation::Horizontal => {
-                knob_style.pos_from_l_pct = Some(pct);
+                knob_style.pos_from_l = Percent(pct);
             },
             ScalerOrientation::Vertical => {
-                knob_style.pos_from_b_pct = Some(pct);
+                knob_style.pos_from_b = Percent(pct);
             },
         }
 
@@ -508,156 +507,123 @@ impl Scaler {
             .push(Box::new(on_change));
     }
 
-    fn style_update(self: &Arc<Self>) {
-        let border_size = self.theme.border.unwrap_or(0.0);
-
-        let [
-            widget_width,
-            widget_height,
-            track_space,
-            track_size,
-            knob_size,
-        ] = match self.props.orientation {
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`) and
+    /// the [`ScalerOrientation`](`ScalerOrientation`).
+    pub fn default_placement(theme: &Theme, orientation: ScalerOrientation) -> WidgetPlacement {
+        match orientation {
             ScalerOrientation::Horizontal => {
-                let widget_height = match self.props.height {
-                    Some(height) => height,
-                    None => self.theme.base_size,
-                };
-
-                let widget_width = match self.props.width {
-                    Some(width) => width.max(widget_height),
-                    None => widget_height * 4.0,
-                };
-
-                let track_space = widget_height / 4.0;
-                let track_size = widget_height - (track_space * 2.0);
-
-                [
-                    widget_width,
-                    widget_height,
-                    track_space,
-                    track_size,
-                    widget_height - (border_size * 2.0),
-                ]
+                WidgetPlacement {
+                    position: Position::Floating,
+                    margin_t: Pixels(theme.spacing),
+                    margin_b: Pixels(theme.spacing),
+                    margin_l: Pixels(theme.spacing),
+                    margin_r: Pixels(theme.spacing),
+                    width: Pixels(theme.base_size * 4.0),
+                    height: Pixels(theme.base_size),
+                    ..Default::default()
+                }
             },
             ScalerOrientation::Vertical => {
-                let widget_width = match self.props.width {
-                    Some(width) => width,
-                    None => self.theme.base_size,
-                };
-
-                let widget_height = match self.props.height {
-                    Some(height) => height.max(widget_width),
-                    None => widget_width * 4.0,
-                };
-
-                let track_space = widget_width / 4.0;
-                let track_size = widget_width - (track_space * 2.0);
-
-                [
-                    widget_width,
-                    widget_height,
-                    track_space,
-                    track_size,
-                    widget_width - (border_size * 2.0),
-                ]
+                WidgetPlacement {
+                    position: Position::Floating,
+                    margin_t: Pixels(theme.spacing),
+                    margin_b: Pixels(theme.spacing),
+                    margin_l: Pixels(theme.spacing),
+                    margin_r: Pixels(theme.spacing),
+                    width: Pixels(theme.base_size),
+                    height: Pixels(theme.base_size * 4.0),
+                    ..Default::default()
+                }
             },
-        };
+        }
+    }
+
+    fn style_update(self: &Arc<Self>) {
+        let border_size = self.theme.border.unwrap_or(0.0);
 
         let pct = ((*self.state.lock().val.borrow() - self.props.min)
             / (self.props.max - self.props.min))
             * 100.0;
 
-        let container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            height: Some(widget_height),
-            width: Some(widget_width),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
-            ..Default::default()
-        };
+        let container_style = self.props.placement.clone().into_style();
 
         let mut track_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            back_color: Some(self.theme.colors.back3),
-            border_radius_tl: Some(track_size / 2.0),
-            border_radius_tr: Some(track_size / 2.0),
-            border_radius_bl: Some(track_size / 2.0),
-            border_radius_br: Some(track_size / 2.0),
+            back_color: self.theme.colors.back3,
             ..Default::default()
         };
 
-        let mut confine_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            ..Default::default()
-        };
+        let mut confine_style = BinStyle::default();
 
         let mut knob_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            back_color: Some(self.theme.colors.accent1),
-            border_radius_tl: Some(knob_size / 2.0),
-            border_radius_tr: Some(knob_size / 2.0),
-            border_radius_bl: Some(knob_size / 2.0),
-            border_radius_br: Some(knob_size / 2.0),
+            position: Position::Anchor,
+            back_color: self.theme.colors.accent1,
+            border_radius_tl: PctOfWidth(50.0),
+            border_radius_tr: PctOfWidth(50.0),
+            border_radius_bl: PctOfWidth(50.0),
+            border_radius_br: PctOfWidth(50.0),
             ..Default::default()
         };
 
         match self.props.orientation {
             ScalerOrientation::Horizontal => {
-                track_style.pos_from_t = Some(track_space);
-                track_style.pos_from_b = Some(track_space);
-                track_style.pos_from_l = Some(border_size);
-                track_style.pos_from_r = Some(border_size);
+                track_style.pos_from_t = Percent(25.0);
+                track_style.pos_from_b = Percent(25.0);
+                track_style.pos_from_l = Pixels(border_size);
+                track_style.pos_from_r = Pixels(border_size);
+                track_style.border_radius_tl = PctOfHeight(50.0);
+                track_style.border_radius_tr = PctOfHeight(50.0);
+                track_style.border_radius_bl = PctOfHeight(50.0);
+                track_style.border_radius_br = PctOfHeight(50.0);
 
-                confine_style.pos_from_t = Some(0.0);
-                confine_style.pos_from_b = Some(0.0);
-                confine_style.pos_from_l = Some(border_size);
-                confine_style.pos_from_r = Some(widget_height - border_size);
-                confine_style.overflow_x = Some(true);
+                confine_style.pos_from_t = Pixels(0.0);
+                confine_style.pos_from_b = Pixels(0.0);
+                confine_style.pos_from_l = Pixels(border_size);
+                confine_style.pos_from_r = PctOfHeightOffset(100.0, -border_size);
 
-                knob_style.pos_from_t = Some(border_size);
-                knob_style.pos_from_b = Some(border_size);
-                knob_style.pos_from_l_pct = Some(pct);
-                knob_style.width = Some(knob_size);
+                knob_style.pos_from_t = Pixels(border_size);
+                knob_style.pos_from_b = Pixels(border_size);
+                knob_style.pos_from_l = Percent(pct);
+                knob_style.width = PctOfHeightOffset(100.0, -2.0 * border_size);
             },
             ScalerOrientation::Vertical => {
-                track_style.pos_from_t = Some(border_size);
-                track_style.pos_from_b = Some(border_size);
-                track_style.pos_from_l = Some(track_space);
-                track_style.pos_from_r = Some(track_space);
+                track_style.pos_from_t = Pixels(border_size);
+                track_style.pos_from_b = Pixels(border_size);
+                track_style.pos_from_l = Percent(25.0);
+                track_style.pos_from_r = Percent(25.0);
+                track_style.border_radius_tl = PctOfWidth(50.0);
+                track_style.border_radius_tr = PctOfWidth(50.0);
+                track_style.border_radius_bl = PctOfWidth(50.0);
+                track_style.border_radius_br = PctOfWidth(50.0);
 
-                confine_style.pos_from_t = Some(widget_width - border_size);
-                confine_style.pos_from_b = Some(border_size);
-                confine_style.pos_from_l = Some(0.0);
-                confine_style.pos_from_r = Some(0.0);
-                confine_style.overflow_y = Some(true);
+                confine_style.pos_from_t = PctOfWidthOffset(100.0, -border_size);
+                confine_style.pos_from_b = Pixels(border_size);
+                confine_style.pos_from_l = Pixels(0.0);
+                confine_style.pos_from_r = Pixels(0.0);
 
-                knob_style.pos_from_l = Some(border_size);
-                knob_style.pos_from_r = Some(border_size);
-                knob_style.pos_from_b_pct = Some(pct);
-                knob_style.height = Some(knob_size);
+                knob_style.pos_from_l = Pixels(border_size);
+                knob_style.pos_from_r = Pixels(border_size);
+                knob_style.pos_from_b = Percent(pct);
+                knob_style.height = PctOfWidthOffset(100.0, -2.0 * border_size);
             },
         }
 
         if let Some(border_size) = self.theme.border {
-            track_style.border_size_t = Some(border_size);
-            track_style.border_size_b = Some(border_size);
-            track_style.border_size_l = Some(border_size);
-            track_style.border_size_r = Some(border_size);
-            track_style.border_color_t = Some(self.theme.colors.border3);
-            track_style.border_color_b = Some(self.theme.colors.border3);
-            track_style.border_color_l = Some(self.theme.colors.border3);
-            track_style.border_color_r = Some(self.theme.colors.border3);
-            knob_style.border_size_t = Some(border_size);
-            knob_style.border_size_b = Some(border_size);
-            knob_style.border_size_l = Some(border_size);
-            knob_style.border_size_r = Some(border_size);
-            knob_style.border_color_t = Some(self.theme.colors.border3);
-            knob_style.border_color_b = Some(self.theme.colors.border3);
-            knob_style.border_color_l = Some(self.theme.colors.border3);
-            knob_style.border_color_r = Some(self.theme.colors.border3);
+            track_style.border_size_t = Pixels(border_size);
+            track_style.border_size_b = Pixels(border_size);
+            track_style.border_size_l = Pixels(border_size);
+            track_style.border_size_r = Pixels(border_size);
+            track_style.border_color_t = self.theme.colors.border3;
+            track_style.border_color_b = self.theme.colors.border3;
+            track_style.border_color_l = self.theme.colors.border3;
+            track_style.border_color_r = self.theme.colors.border3;
+            knob_style.border_size_t = Pixels(border_size);
+            knob_style.border_size_b = Pixels(border_size);
+            knob_style.border_size_l = Pixels(border_size);
+            knob_style.border_size_r = Pixels(border_size);
+            knob_style.border_color_t = self.theme.colors.border3;
+            knob_style.border_color_b = self.theme.colors.border3;
+            knob_style.border_color_l = self.theme.colors.border3;
+            knob_style.border_color_r = self.theme.colors.border3;
         }
 
         Bin::style_update_batch([

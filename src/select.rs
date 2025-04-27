@@ -2,13 +2,18 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use basalt::image::ImageKey;
 use basalt::input::{MouseButton, Qwerty};
-use basalt::interface::{Bin, BinPosition, BinStyle, TextHoriAlign, TextVertAlign, TextWrap};
+use basalt::interface::UnitValue::{PctOfHeight, PctOffset, Pixels};
+use basalt::interface::{
+    Bin, BinStyle, Position, TextAttrs, TextBody, TextHoriAlign, TextVertAlign, TextWrap,
+    Visibility, ZIndex,
+};
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
 use crate::scroll_bar::down_symbol_verts;
-use crate::{ScrollBar, Theme, WidgetContainer};
+use crate::{ScrollBar, Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`Select`]
 pub struct SelectBuilder<'a, C, I> {
@@ -22,13 +27,15 @@ pub struct SelectBuilder<'a, C, I> {
 struct Properties {
     no_selection_label: String,
     drop_down_items: usize,
+    placement: WidgetPlacement,
 }
 
-impl Default for Properties {
-    fn default() -> Self {
+impl Properties {
+    fn new(placement: WidgetPlacement) -> Self {
         Self {
             no_selection_label: String::new(),
             drop_down_items: 3,
+            placement,
         }
     }
 }
@@ -38,10 +45,15 @@ where
     C: WidgetContainer,
     I: Ord + Copy + Send + 'static,
 {
-    pub(crate) fn with_builder(builder: WidgetBuilder<'a, C>) -> Self {
+    pub(crate) fn with_builder(mut builder: WidgetBuilder<'a, C>) -> Self {
         Self {
+            props: Properties::new(
+                builder
+                    .placement
+                    .take()
+                    .unwrap_or_else(|| Select::<()>::default_placement(&builder.theme)),
+            ),
             widget: builder,
-            props: Default::default(),
             select: None,
             options: BTreeMap::new(),
             on_select: Vec::new(),
@@ -446,12 +458,9 @@ where
             }
         };
 
-        self.container
-            .style_update(BinStyle {
-                text: label,
-                ..self.container.style_copy()
-            })
-            .expect_valid();
+        self.container.style_modify(move |style| {
+            style.text_body.spans[0].text = label.clone(); // TODO: Why Clone???
+        });
 
         if let Ok(mut callbacks) = state.on_select.try_borrow_mut() {
             for callback in callbacks.iter_mut() {
@@ -487,13 +496,13 @@ where
 
         let mut style_update_batch = Vec::new();
         let mut popup_style = self.popup.style_copy();
-        popup_style.hidden = None;
+        popup_style.visibility = Visibility::Inheirt;
         style_update_batch.push((&self.popup, popup_style));
 
         if self.theme.roundness.is_some() {
             let mut container_style = self.container.style_copy();
-            container_style.border_radius_bl = None;
-            container_style.border_radius_br = None;
+            container_style.border_radius_bl = Default::default();
+            container_style.border_radius_br = Default::default();
             style_update_batch.push((&self.container, container_style));
         }
 
@@ -512,23 +521,21 @@ where
 
         for (i, option_state) in options.values().enumerate() {
             let [back_color, text_color] = if index.is_some() && i == index.unwrap() {
-                [
-                    Some(self.theme.colors.accent1),
-                    Some(self.theme.colors.text1b),
-                ]
+                [self.theme.colors.accent1, self.theme.colors.text1b]
             } else {
-                [None, Some(self.theme.colors.text1a)]
+                [Default::default(), self.theme.colors.text1a]
             };
 
             if let Some(mut option_style) = option_state.bin.style_inspect(|style| {
-                if style.back_color == back_color && style.text_color == text_color {
+                if style.back_color == back_color && style.text_body.base_attrs.color == text_color
+                {
                     None
                 } else {
                     Some(style.clone())
                 }
             }) {
                 option_style.back_color = back_color;
-                option_style.text_color = text_color;
+                option_style.text_body.base_attrs.color = text_color;
                 style_update_batch.push((&option_state.bin, option_style));
             }
         }
@@ -543,13 +550,13 @@ where
 
         let mut style_update_batch = Vec::new();
         let mut popup_style = self.popup.style_copy();
-        popup_style.hidden = Some(true);
+        popup_style.visibility = Visibility::Hide;
         style_update_batch.push((&self.popup, popup_style));
 
         if let Some(border_radius) = self.theme.roundness {
             let mut container_style = self.container.style_copy();
-            container_style.border_radius_bl = Some(border_radius);
-            container_style.border_radius_br = Some(border_radius);
+            container_style.border_radius_bl = Pixels(border_radius);
+            container_style.border_radius_br = Pixels(border_radius);
             style_update_batch.push((&self.container, container_style));
         }
 
@@ -605,13 +612,13 @@ where
         for (i, option_state) in options.values().enumerate() {
             if popup.select_i.is_some() && i == popup.select_i.unwrap() {
                 let mut option_style = option_state.bin.style_copy();
-                option_style.back_color = None;
-                option_style.text_color = Some(self.theme.colors.text1a);
+                option_style.back_color = Default::default();
+                option_style.text_body.base_attrs.color = self.theme.colors.text1a;
                 style_update_batch.push((&option_state.bin, option_style));
             } else if i == index {
                 let mut option_style = option_state.bin.style_copy();
-                option_style.back_color = Some(self.theme.colors.accent1);
-                option_style.text_color = Some(self.theme.colors.text1b);
+                option_style.back_color = self.theme.colors.accent1;
+                option_style.text_body.base_attrs.color = self.theme.colors.text1b;
                 style_update_batch.push((&option_state.bin, option_style));
             }
 
@@ -649,33 +656,37 @@ where
 
             for (i, option_state) in options.values().enumerate() {
                 let mut option_style = BinStyle {
-                    position: Some(BinPosition::Parent),
-                    pos_from_t: Some(
+                    pos_from_t: Pixels(
                         i as f32
                             * (self.theme.spacing
                                 + self.theme.base_size
                                 + self.theme.border.unwrap_or(0.0)),
                     ),
-                    pos_from_l: Some(0.0),
-                    pos_from_r: Some(0.0),
-                    text: option_state.label.clone(),
-                    height: Some(self.theme.spacing + self.theme.base_size),
-                    pad_l: Some(self.theme.spacing),
-                    pad_r: Some(self.theme.spacing),
-                    text_height: Some(self.theme.text_height),
-                    text_color: Some(self.theme.colors.text1a),
-                    text_hori_align: Some(TextHoriAlign::Left),
-                    text_vert_align: Some(TextVertAlign::Center),
-                    text_wrap: Some(TextWrap::None),
-                    font_family: Some(self.theme.font_family.clone()),
-                    font_weight: Some(self.theme.font_weight),
+                    pos_from_l: Pixels(0.0),
+                    pos_from_r: Pixels(0.0),
+                    height: Pixels(self.theme.spacing + self.theme.base_size),
+                    padding_l: Pixels(self.theme.spacing),
+                    padding_r: Pixels(self.theme.spacing),
+                    text_body: TextBody {
+                        hori_align: TextHoriAlign::Left,
+                        vert_align: TextVertAlign::Center,
+                        text_wrap: TextWrap::None,
+                        base_attrs: TextAttrs {
+                            height: Pixels(self.theme.text_height),
+                            color: self.theme.colors.text1a,
+                            font_family: self.theme.font_family.clone(),
+                            font_weight: self.theme.font_weight,
+                            ..Default::default()
+                        },
+                        ..TextBody::from(option_state.label.clone())
+                    },
                     ..Default::default()
                 };
 
                 if i != num_options - 1 {
                     if let Some(border_size) = self.theme.border {
-                        option_style.border_size_b = Some(border_size);
-                        option_style.border_color_b = Some(self.theme.colors.border2);
+                        option_style.border_size_b = Pixels(border_size);
+                        option_style.border_color_b = self.theme.colors.border2;
                     }
                 }
 
@@ -692,74 +703,65 @@ where
     }
 
     fn style_update(&self) {
-        let widget_height = self.theme.spacing + self.theme.base_size;
-        let widget_width = widget_height * 5.0;
         let border_size = self.theme.border.unwrap_or(0.0);
 
         let mut container_style = BinStyle {
-            position: Some(BinPosition::Floating),
-            margin_t: Some(self.theme.spacing),
-            margin_b: Some(self.theme.spacing),
-            margin_l: Some(self.theme.spacing),
-            margin_r: Some(self.theme.spacing),
-            width: Some(widget_width),
-            height: Some(widget_height),
-            pad_l: Some(self.theme.spacing),
-            pad_r: Some(widget_height),
-            back_color: Some(self.theme.colors.back3),
-            text_height: Some(self.theme.text_height),
-            text_color: Some(self.theme.colors.text1a),
-            text_hori_align: Some(TextHoriAlign::Left),
-            text_vert_align: Some(TextVertAlign::Center),
-            text_wrap: Some(TextWrap::None),
-            font_family: Some(self.theme.font_family.clone()),
-            font_weight: Some(self.theme.font_weight),
-            overflow_y: Some(true),
-            overflow_x: Some(true),
-            ..Default::default()
+            padding_l: Pixels(self.theme.spacing),
+            padding_r: PctOfHeight(100.0),
+            back_color: self.theme.colors.back3,
+            text_body: TextBody {
+                spans: vec![Default::default()],
+                hori_align: TextHoriAlign::Left,
+                vert_align: TextVertAlign::Center,
+                text_wrap: TextWrap::None,
+                base_attrs: TextAttrs {
+                    height: Pixels(self.theme.text_height),
+                    color: self.theme.colors.text1a,
+                    font_family: self.theme.font_family.clone(),
+                    font_weight: self.theme.font_weight,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..self.props.placement.clone().into_style()
         };
 
         let arrow_down_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            pos_from_t: Some(0.0),
-            pos_from_b: Some(0.0),
-            pos_from_r: Some(0.0),
-            width: Some(widget_height),
-            custom_verts: down_symbol_verts(
-                widget_height,
-                self.theme.spacing,
-                self.theme.colors.text1a,
-            ),
+            pos_from_t: Pixels(0.0),
+            pos_from_b: Pixels(0.0),
+            pos_from_r: Pixels(0.0),
+            width: PctOfHeight(100.0),
+            user_vertexes: vec![(
+                ImageKey::INVALID,
+                down_symbol_verts(33.0, self.theme.colors.text1a),
+            )],
             ..Default::default()
         };
 
         let mut popup_style = BinStyle {
-            hidden: Some(true),
-            position: Some(BinPosition::Parent),
-            pos_from_t_pct: Some(100.0),
-            pos_from_t_offset: Some(border_size),
-            pos_from_l: Some(0.0),
-            pos_from_r: Some(0.0),
-            height: Some(
-                (widget_height * self.props.drop_down_items as f32)
-                    + (border_size
-                        * (self.props.drop_down_items.checked_sub(1).unwrap_or(0) as f32)),
+            position: Position::Anchor,
+            z_index: ZIndex::Offset(100),
+            visibility: Visibility::Hide,
+            pos_from_t: PctOffset(100.0, border_size),
+            pos_from_l: Pixels(0.0),
+            pos_from_r: Pixels(0.0),
+            height: PctOffset(
+                100.0 * self.props.drop_down_items as f32,
+                border_size * self.props.drop_down_items.checked_sub(1).unwrap_or(0) as f32,
             ),
-            back_color: Some(self.theme.colors.back2),
-            add_z_index: Some(100),
+            back_color: self.theme.colors.back2,
             ..Default::default()
         };
 
         let option_list_style = BinStyle {
-            position: Some(BinPosition::Parent),
-            pos_from_t: Some(0.0),
-            pos_from_l: Some(0.0),
-            pos_from_r: Some(ScrollBar::size(&self.theme)),
-            pos_from_b: Some(0.0),
+            pos_from_t: Pixels(0.0),
+            pos_from_l: Pixels(0.0),
+            pos_from_r: Pixels(ScrollBar::size(&self.theme)),
+            pos_from_b: Pixels(0.0),
             ..Default::default()
         };
 
-        container_style.text = {
+        container_style.text_body.spans[0].text = {
             let state = self.state.lock();
             let select = state.select.borrow();
             let options = state.options.borrow();
@@ -776,31 +778,31 @@ where
         };
 
         if let Some(border_size) = self.theme.border {
-            container_style.border_size_t = Some(border_size);
-            container_style.border_size_b = Some(border_size);
-            container_style.border_size_l = Some(border_size);
-            container_style.border_size_r = Some(border_size);
-            container_style.border_color_t = Some(self.theme.colors.border1);
-            container_style.border_color_b = Some(self.theme.colors.border1);
-            container_style.border_color_l = Some(self.theme.colors.border1);
-            container_style.border_color_r = Some(self.theme.colors.border1);
+            container_style.border_size_t = Pixels(border_size);
+            container_style.border_size_b = Pixels(border_size);
+            container_style.border_size_l = Pixels(border_size);
+            container_style.border_size_r = Pixels(border_size);
+            container_style.border_color_t = self.theme.colors.border1;
+            container_style.border_color_b = self.theme.colors.border1;
+            container_style.border_color_l = self.theme.colors.border1;
+            container_style.border_color_r = self.theme.colors.border1;
 
-            popup_style.border_size_b = Some(border_size);
-            popup_style.border_size_l = Some(border_size);
-            popup_style.border_size_r = Some(border_size);
-            popup_style.border_color_b = Some(self.theme.colors.border1);
-            popup_style.border_color_l = Some(self.theme.colors.border1);
-            popup_style.border_color_r = Some(self.theme.colors.border1);
+            popup_style.border_size_b = Pixels(border_size);
+            popup_style.border_size_l = Pixels(border_size);
+            popup_style.border_size_r = Pixels(border_size);
+            popup_style.border_color_b = self.theme.colors.border1;
+            popup_style.border_color_l = self.theme.colors.border1;
+            popup_style.border_color_r = self.theme.colors.border1;
         }
 
         if let Some(border_radius) = self.theme.roundness {
-            container_style.border_radius_tl = Some(border_radius);
-            container_style.border_radius_tr = Some(border_radius);
-            container_style.border_radius_bl = Some(border_radius);
-            container_style.border_radius_br = Some(border_radius);
+            container_style.border_radius_tl = Pixels(border_radius);
+            container_style.border_radius_tr = Pixels(border_radius);
+            container_style.border_radius_bl = Pixels(border_radius);
+            container_style.border_radius_br = Pixels(border_radius);
 
-            popup_style.border_radius_bl = Some(border_radius);
-            popup_style.border_radius_br = Some(border_radius);
+            popup_style.border_radius_bl = Pixels(border_radius);
+            popup_style.border_radius_br = Pixels(border_radius);
         }
 
         Bin::style_update_batch([
@@ -809,5 +811,24 @@ where
             (&self.popup, popup_style),
             (&self.option_list, option_list_style),
         ]);
+    }
+}
+
+impl<I> Select<I> {
+    /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
+    pub fn default_placement(theme: &Theme) -> WidgetPlacement {
+        let height = theme.spacing + theme.base_size;
+        let width = height * 5.0;
+
+        WidgetPlacement {
+            position: Position::Floating,
+            margin_t: Pixels(theme.spacing),
+            margin_b: Pixels(theme.spacing),
+            margin_l: Pixels(theme.spacing),
+            margin_r: Pixels(theme.spacing),
+            width: Pixels(width),
+            height: Pixels(height),
+            ..Default::default()
+        }
     }
 }

@@ -158,7 +158,7 @@ dependencies = [
 [[package]]
 name = "basalt"
 version = "0.21.0"
-source = "git+https://github.com/AustinJ235/basalt.git?rev=011608839051d8e73347db67ce3b00814f2a7f36#011608839051d8e73347db67ce3b00814f2a7f36"
+source = "git+https://github.com/AustinJ235/basalt.git?rev=ed01b2a6bb89ac3720527f322aec39cd9d468852#ed01b2a6bb89ac3720527f322aec39cd9d468852"
 dependencies = [
  "cosmic-text",
  "curl",
@@ -420,18 +420,18 @@ dependencies = [
 
 [[package]]
 name = "cosmic-text"
-version = "0.12.1"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59fd57d82eb4bfe7ffa9b1cec0c05e2fd378155b47f255a67983cb4afe0e80c2"
+checksum = "1db686e755000c93f73a3acc78be56a71e3efb83ed92886f45faea2b9485bad7"
 dependencies = [
  "bitflags 2.8.0",
  "fontdb",
  "log",
  "rangemap",
- "rayon",
  "rustc-hash",
  "rustybuzz",
  "self_cell",
+ "smol_str",
  "swash",
  "sys-locale",
  "ttf-parser 0.21.1",
@@ -649,9 +649,9 @@ checksum = "a0d2fde1f7b3d48b8395d5f2de76c18a528bd6a9cdde438df747bfcba3e05d6f"
 
 [[package]]
 name = "font-types"
-version = "0.7.3"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3971f9a5ca983419cdc386941ba3b9e1feba01a0ab888adf78739feb2798492"
+checksum = "1fa6a5e5a77b5f3f7f9e32879f484aa5b3632ddfbe568a16266c904a6f32cdaf"
 dependencies = [
  "bytemuck",
 ]
@@ -1962,9 +1962,9 @@ dependencies = [
 
 [[package]]
 name = "read-fonts"
-version = "0.22.7"
+version = "0.25.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69aacb76b5c29acfb7f90155d39759a29496aebb49395830e928a9703d2eec2f"
+checksum = "f6f9e8a4f503e5c8750e4cd3b32a4e090035c46374b305a15c70bad833dca05f"
 dependencies = [
  "bytemuck",
  "font-types",
@@ -2191,9 +2191,9 @@ dependencies = [
 
 [[package]]
 name = "skrifa"
-version = "0.22.3"
+version = "0.26.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e1c44ad1f6c5bdd4eefed8326711b7dbda9ea45dfd36068c427d332aa382cbe"
+checksum = "8cc1aa86c26dbb1b63875a7180aa0819709b33348eb5b1491e4321fae388179d"
 dependencies = [
  "bytemuck",
  "read-fonts",
@@ -2302,9 +2302,9 @@ checksum = "ce5d813d71d82c4cbc1742135004e4a79fd870214c155443451c139c9470a0aa"
 
 [[package]]
 name = "swash"
-version = "0.1.19"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbd59f3f359ddd2c95af4758c18270eddd9c730dde98598023cdabff472c2ca2"
+checksum = "fae9a562c7b46107d9c78cd78b75bbe1e991c16734c0aee8ff0ee711fb8b620a"
 dependencies = [
  "skrifa",
  "yazi",
@@ -3293,9 +3293,9 @@ checksum = "66fee0b777b0f5ac1c69bb06d361268faafa61cd4682ae064a171c16c433e9e4"
 
 [[package]]
 name = "yazi"
-version = "0.1.6"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c94451ac9513335b5e23d7a8a2b61a7102398b8cca5160829d313e84c9d98be1"
+checksum = "e01738255b5a16e78bbb83e7fbba0a1e7dd506905cfc53f4622d89015a03fbb5"
 
 [[package]]
 name = "yoke"
@@ -3323,9 +3323,9 @@ dependencies = [
 
 [[package]]
 name = "zeno"
-version = "0.2.3"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd15f8e0dbb966fd9245e7498c7e9e5055d9e5c8b676b95bd67091cd11a1e697"
+checksum = "cc0de2315dc13d00e5df3cd6b8d2124a6eaec6a2d4b6a1c5f37b7efad17fcc17"
 
 [[package]]
 name = "zerocopy"
