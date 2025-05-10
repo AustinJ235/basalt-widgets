@@ -168,6 +168,12 @@ fn main() {
             })
             .build();
 
+        let _text_area = background
+            .create_widget()
+            .text_area()
+            .text_body(basalt::interface::TextBody::from("Enter text here..."))
+            .build();
+
         // -- ScrollBar Testing -- //
 
         let scroll_area_container = window.new_bin();
