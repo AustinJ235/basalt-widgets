@@ -133,11 +133,7 @@ where
                 });
 
                 if reset_cursor && cursor_op.is_some() {
-                    let cb2_text_area = cb_text_area.clone();
-
-                    cb_text_area.container.on_update_once(move |_, _| {
-                        cb2_text_area.reset_cursor_blink();
-                    });
+                    cb_text_area.reset_cursor_blink();
                 }
 
                 if cursor_op.is_some() {
@@ -216,6 +212,14 @@ where
                         style.text_body.selection = None;
                     },
                 }
+
+                debug_assert!(
+                    style
+                        .text_body
+                        .selection
+                        .map(|selection| style.text_body.is_selection_valid(selection))
+                        .unwrap_or(true)
+                );
             });
 
             Default::default()
@@ -240,12 +244,7 @@ where
                     );
                 });
 
-                let cb2_text_area = cb_text_area.clone();
-
-                cb_text_area.container.on_update_once(move |_, _| {
-                    cb2_text_area.reset_cursor_blink();
-                });
-
+                cb_text_area.reset_cursor_blink();
                 Default::default()
             });
 
@@ -268,12 +267,7 @@ where
                     );
                 });
 
-                let cb2_text_area = cb_text_area.clone();
-
-                cb_text_area.container.on_update_once(move |_, _| {
-                    cb2_text_area.reset_cursor_blink();
-                });
-
+                cb_text_area.reset_cursor_blink();
                 Default::default()
             });
 
@@ -292,6 +286,7 @@ where
                             .cursor_delete(style.text_body.cursor.unwrap())
                             .unwrap(),
                     );
+
                     cb_text_area.reset_cursor_blink();
                 } else {
                     if c.0 == '\r' {
@@ -352,6 +347,7 @@ impl TextArea {
     }
 
     fn reset_cursor_blink(&self) {
+        let _state = self.state.lock();
         self.pause_cursor_blink();
         self.start_cursor_blink();
     }
