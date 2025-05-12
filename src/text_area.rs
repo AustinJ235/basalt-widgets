@@ -186,13 +186,16 @@ where
                 return Default::default();
             }
 
+            // Note: `get_text_cursor` must be called outside of `style_modify`.
+            let sel_to_op = cb_text_area.container.get_text_cursor(window.cursor_pos());
+
             cb_text_area.container.style_modify(|style| {
                 let sel_from = match style.text_body.cursor {
                     Some(sel_from) => sel_from,
                     None => return,
                 };
 
-                match cb_text_area.container.get_text_cursor(window.cursor_pos()) {
+                match sel_to_op {
                     Some(sel_to) => {
                         if sel_to == sel_from {
                             style.text_body.selection = None;
@@ -212,14 +215,6 @@ where
                         style.text_body.selection = None;
                     },
                 }
-
-                debug_assert!(
-                    style
-                        .text_body
-                        .selection
-                        .map(|selection| style.text_body.is_selection_valid(selection))
-                        .unwrap_or(true)
-                );
             });
 
             Default::default()
