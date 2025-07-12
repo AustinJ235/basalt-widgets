@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use basalt::input::{MouseButton, Qwerty};
 use basalt::interface::UnitValue::Pixels;
-use basalt::interface::{Bin, BinStyle, Position, TextBody, TextSelection};
+use basalt::interface::{Bin, BinStyle, Position, TextBody, TextCursor, TextSelection};
 use basalt::interval::IntvlHookID;
 use parking_lot::ReentrantMutex;
 
@@ -122,21 +122,16 @@ where
         text_area
             .container
             .on_press(MouseButton::Left, move |_, window, _| {
-                let cursor_op = cb_text_area.container.get_text_cursor(window.cursor_pos());
+                let cursor = cb_text_area.container.get_text_cursor(window.cursor_pos());
 
-                let reset_cursor = cb_text_area.container.style_modify(|style| {
-                    let reset_cursor = style.text_body.cursor.is_some();
-                    style.text_body.cursor = cursor_op;
+                cb_text_area.container.style_modify(|style| {
+                    style.text_body.cursor = cursor;
                     style.text_body.selection = None;
                     style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
-                    reset_cursor
                 });
 
-                if reset_cursor && cursor_op.is_some() {
+                if cursor != TextCursor::None {
                     cb_text_area.reset_cursor_blink();
-                }
-
-                if cursor_op.is_some() {
                     cb_selecting.store(true, atomic::Ordering::Relaxed);
                 }
 
@@ -187,16 +182,19 @@ where
             }
 
             // Note: `get_text_cursor` must be called outside of `style_modify`.
-            let sel_to_op = cb_text_area.container.get_text_cursor(window.cursor_pos());
+            let sel_to_cursor = cb_text_area.container.get_text_cursor(window.cursor_pos());
 
             cb_text_area.container.style_modify(|style| {
                 let sel_from = match style.text_body.cursor {
-                    Some(sel_from) => sel_from,
-                    None => return,
+                    TextCursor::None | TextCursor::Empty => return,
+                    TextCursor::Position(sel_from) => sel_from,
                 };
 
-                match sel_to_op {
-                    Some(sel_to) => {
+                match sel_to_cursor {
+                    TextCursor::None | TextCursor::Empty => {
+                        style.text_body.selection = None;
+                    },
+                    TextCursor::Position(sel_to) => {
                         if sel_to == sel_from {
                             style.text_body.selection = None;
                         } else if sel_to > sel_from {
@@ -211,9 +209,6 @@ where
                             });
                         }
                     },
-                    None => {
-                        style.text_body.selection = None;
-                    },
                 }
             });
 
@@ -226,17 +221,11 @@ where
             .container
             .on_press(Qwerty::ArrowLeft, move |_, _, _| {
                 cb_text_area.container.style_modify(|style| {
-                    let curr_cursor = match style.text_body.cursor {
-                        Some(curr_cursor) => curr_cursor,
-                        None => return,
-                    };
-
-                    style.text_body.cursor = Some(
-                        style
-                            .text_body
-                            .cursor_prev(curr_cursor)
-                            .unwrap_or(curr_cursor),
-                    );
+                    style.text_body.cursor =
+                        match style.text_body.cursor_prev(style.text_body.cursor) {
+                            TextCursor::Empty | TextCursor::None => style.text_body.cursor,
+                            TextCursor::Position(cursor) => cursor.into(),
+                        };
                 });
 
                 cb_text_area.reset_cursor_blink();
@@ -249,17 +238,11 @@ where
             .container
             .on_press(Qwerty::ArrowRight, move |_, _, _| {
                 cb_text_area.container.style_modify(|style| {
-                    let curr_cursor = match style.text_body.cursor {
-                        Some(curr_cursor) => curr_cursor,
-                        None => return,
-                    };
-
-                    style.text_body.cursor = Some(
-                        style
-                            .text_body
-                            .cursor_next(curr_cursor)
-                            .unwrap_or(curr_cursor),
-                    );
+                    style.text_body.cursor =
+                        match style.text_body.cursor_next(style.text_body.cursor) {
+                            TextCursor::Empty | TextCursor::None => style.text_body.cursor,
+                            TextCursor::Position(cursor) => cursor.into(),
+                        };
                 });
 
                 cb_text_area.reset_cursor_blink();
@@ -271,16 +254,11 @@ where
         text_area.container.on_character(move |_, _, mut c| {
             cb_text_area.container.style_modify(|style| {
                 if c.is_backspace() {
-                    if style.text_body.cursor.is_none() {
+                    if matches!(style.text_body.cursor, TextCursor::None | TextCursor::Empty) {
                         return;
                     }
 
-                    style.text_body.cursor = Some(
-                        style
-                            .text_body
-                            .cursor_delete(style.text_body.cursor.unwrap())
-                            .unwrap(),
-                    );
+                    style.text_body.cursor = style.text_body.cursor_delete(style.text_body.cursor);
 
                     cb_text_area.reset_cursor_blink();
                 } else {
@@ -288,18 +266,12 @@ where
                         c.0 = '\n';
                     }
 
-                    if style.text_body.cursor.is_none() {
-                        style.text_body.cursor = Some(style.text_body.push(*c));
-                    } else {
-                        style.text_body.cursor = Some(
-                            style
-                                .text_body
-                                .cursor_insert(style.text_body.cursor.unwrap(), *c)
-                                .unwrap(),
-                        );
-                    }
+                    style.text_body.cursor =
+                        style.text_body.cursor_insert(style.text_body.cursor, *c);
 
-                    cb_text_area.reset_cursor_blink();
+                    if style.text_body.cursor != TextCursor::None {
+                        cb_text_area.reset_cursor_blink();
+                    }
                 }
             });
 
