@@ -10,7 +10,7 @@ use basalt::interval::IntvlHookID;
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{Theme, WidgetContainer, WidgetPlacement};
+use crate::{ScrollAxis, ScrollBar, Theme, WidgetContainer, WidgetPlacement};
 
 /// Builder for [`TextArea`]
 pub struct TextAreaBuilder<'a, C> {
@@ -64,7 +64,39 @@ where
             .window()
             .expect("The widget container must have an associated window.");
 
-        let container = window.new_bin();
+        let mut bins = window.new_bins(2).into_iter();
+        let container = bins.next().unwrap();
+        let editor = bins.next().unwrap();
+
+        container.add_child(editor.clone());
+
+        let sb_size = match ScrollBar::default_placement(&self.widget.theme, ScrollAxis::Y).width {
+            Pixels(px) => px,
+            _ => unreachable!(),
+        };
+
+        let border_size = self.widget.theme.border.unwrap_or(0.0);
+
+        let v_scroll_b = container
+            .create_widget()
+            .with_theme(self.widget.theme.clone())
+            .with_placement(WidgetPlacement {
+                pos_from_b: Pixels(sb_size + border_size),
+                ..ScrollBar::default_placement(&self.widget.theme, ScrollAxis::Y)
+            })
+            .scroll_bar(&editor)
+            .build();
+
+        let h_scroll_b = container
+            .create_widget()
+            .with_theme(self.widget.theme.clone())
+            .with_placement(WidgetPlacement {
+                pos_from_r: Pixels(sb_size + border_size),
+                ..ScrollBar::default_placement(&self.widget.theme, ScrollAxis::X)
+            })
+            .scroll_bar(&editor)
+            .axis(ScrollAxis::X)
+            .build();
 
         self.widget
             .container
@@ -75,6 +107,9 @@ where
             theme: self.widget.theme,
             props: self.props,
             container,
+            editor,
+            v_scroll_b,
+            h_scroll_b,
             state: ReentrantMutex::new(State {
                 c_blink_intvl_hid: RefCell::new(None),
             }),
@@ -82,9 +117,9 @@ where
 
         let cb_text_area = text_area.clone();
 
-        text_area.container.on_focus(move |_, _| {
+        text_area.editor.on_focus(move |_, _| {
             if cb_text_area.theme.border.is_some() {
-                cb_text_area.container.style_modify(|style| {
+                cb_text_area.editor.style_modify(|style| {
                     style.border_color_t = cb_text_area.theme.colors.accent1;
                     style.border_color_b = cb_text_area.theme.colors.accent1;
                     style.border_color_l = cb_text_area.theme.colors.accent1;
@@ -99,9 +134,9 @@ where
 
         let cb_text_area = text_area.clone();
 
-        text_area.container.on_focus_lost(move |_, _| {
+        text_area.editor.on_focus_lost(move |_, _| {
             if cb_text_area.theme.border.is_some() {
-                cb_text_area.container.style_modify(|style| {
+                cb_text_area.editor.style_modify(|style| {
                     style.border_color_t = cb_text_area.theme.colors.border1;
                     style.border_color_b = cb_text_area.theme.colors.border1;
                     style.border_color_l = cb_text_area.theme.colors.border1;
@@ -120,11 +155,11 @@ where
         let cb_selecting = selecting.clone();
 
         text_area
-            .container
+            .editor
             .on_press(MouseButton::Left, move |_, window, _| {
-                let cursor = cb_text_area.container.get_text_cursor(window.cursor_pos());
+                let cursor = cb_text_area.editor.get_text_cursor(window.cursor_pos());
 
-                cb_text_area.container.style_modify(|style| {
+                cb_text_area.editor.style_modify(|style| {
                     style.text_body.cursor = cursor;
                     style.text_body.selection = None;
                     style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
@@ -141,7 +176,7 @@ where
         let cb_selecting = selecting.clone();
 
         text_area
-            .container
+            .editor
             .on_release(MouseButton::Left, move |_, _, _| {
                 cb_selecting.store(false, atomic::Ordering::Relaxed);
                 Default::default()
@@ -161,7 +196,7 @@ where
                         cursor_visible = !cursor_visible;
                     }
 
-                    cb_text_area.container.style_modify(|style| {
+                    cb_text_area.editor.style_modify(|style| {
                         if cursor_visible {
                             style.text_body.cursor_color.a = 1.0;
                         } else {
@@ -176,15 +211,15 @@ where
         let cb_text_area = text_area.clone();
         let cb_selecting = selecting.clone();
 
-        text_area.container.on_cursor(move |_, window, _| {
+        text_area.editor.on_cursor(move |_, window, _| {
             if !cb_selecting.load(atomic::Ordering::Relaxed) {
                 return Default::default();
             }
 
             // Note: `get_text_cursor` must be called outside of `style_modify`.
-            let sel_to_cursor = cb_text_area.container.get_text_cursor(window.cursor_pos());
+            let sel_to_cursor = cb_text_area.editor.get_text_cursor(window.cursor_pos());
 
-            cb_text_area.container.style_modify(|style| {
+            cb_text_area.editor.style_modify(|style| {
                 let sel_from = match style.text_body.cursor {
                     TextCursor::None | TextCursor::Empty => return,
                     TextCursor::Position(sel_from) => sel_from,
@@ -218,9 +253,9 @@ where
         let cb_text_area = text_area.clone();
 
         text_area
-            .container
+            .editor
             .on_press(Qwerty::ArrowLeft, move |_, _, _| {
-                cb_text_area.container.style_modify(|style| {
+                cb_text_area.editor.style_modify(|style| {
                     style.text_body.cursor =
                         match style.text_body.cursor_prev(style.text_body.cursor) {
                             TextCursor::Empty | TextCursor::None => style.text_body.cursor,
@@ -235,9 +270,9 @@ where
         let cb_text_area = text_area.clone();
 
         text_area
-            .container
+            .editor
             .on_press(Qwerty::ArrowRight, move |_, _, _| {
-                cb_text_area.container.style_modify(|style| {
+                cb_text_area.editor.style_modify(|style| {
                     style.text_body.cursor =
                         match style.text_body.cursor_next(style.text_body.cursor) {
                             TextCursor::Empty | TextCursor::None => style.text_body.cursor,
@@ -251,8 +286,8 @@ where
 
         let cb_text_area = text_area.clone();
 
-        text_area.container.on_character(move |_, _, mut c| {
-            cb_text_area.container.style_modify(|style| {
+        text_area.editor.on_character(move |_, _, mut c| {
+            cb_text_area.editor.style_modify(|style| {
                 if c.is_backspace() {
                     if matches!(style.text_body.cursor, TextCursor::None | TextCursor::Empty) {
                         return;
@@ -278,6 +313,13 @@ where
             Default::default()
         });
 
+        text_area.editor.on_update(|container, _| {
+            let cursor = container.style_inspect(|style| style.text_body.cursor);
+            let bounds = container.get_text_cursor_bounds(cursor);
+            println!("Cursor:        {:?}", cursor);
+            println!("Cursor Bounds: {:?}", bounds);
+        });
+
         text_area.style_update(Some(self.text_body));
         text_area
     }
@@ -288,6 +330,9 @@ pub struct TextArea {
     theme: Theme,
     props: Properties,
     container: Arc<Bin>,
+    editor: Arc<Bin>,
+    v_scroll_b: Arc<ScrollBar>,
+    h_scroll_b: Arc<ScrollBar>,
     state: ReentrantMutex<State>,
 }
 
@@ -320,56 +365,65 @@ impl TextArea {
     }
 
     fn start_cursor_blink(&self) {
-        self.container
+        self.editor
             .basalt_ref()
             .interval_ref()
             .start(self.state.lock().c_blink_intvl_hid.borrow().unwrap());
     }
 
     fn pause_cursor_blink(&self) {
-        self.container
+        self.editor
             .basalt_ref()
             .interval_ref()
             .pause(self.state.lock().c_blink_intvl_hid.borrow().unwrap());
     }
 
     fn style_update(&self, text_body_op: Option<TextBody>) {
-        self.container.style_modify(|style| {
-            let mut text_body = text_body_op.unwrap_or_else(|| style.text_body.clone());
+        let mut container_style = self.props.placement.clone().into_style();
+        container_style.back_color = self.theme.colors.back2;
+        let mut editor_style = BinStyle::default();
 
-            // TODO: This doesn't feel right
-            text_body.base_attrs.height = Pixels(self.theme.text_height);
-            text_body.base_attrs.color = self.theme.colors.text1a;
-            text_body.base_attrs.font_family = self.theme.font_family.clone();
-            text_body.base_attrs.font_weight = self.theme.font_weight;
+        if let Some(text_body) = text_body_op {
+            editor_style.text_body = text_body;
+        }
 
-            *style = BinStyle {
-                back_color: self.theme.colors.back2,
-                text_body,
-                padding_t: Pixels(self.theme.spacing),
-                padding_b: Pixels(self.theme.spacing),
-                padding_l: Pixels(self.theme.spacing),
-                padding_r: Pixels(self.theme.spacing),
-                ..self.props.placement.clone().into_style()
-            };
+        editor_style.position = Position::Relative;
+        editor_style.pos_from_t = Pixels(0.0);
+        editor_style.pos_from_b = ScrollBar::default_placement(&self.theme, ScrollAxis::X).height;
+        editor_style.pos_from_l = Pixels(0.0);
+        editor_style.pos_from_r = ScrollBar::default_placement(&self.theme, ScrollAxis::Y).width;
+        editor_style.text_body.base_attrs.height = Pixels(self.theme.text_height);
+        editor_style.text_body.base_attrs.color = self.theme.colors.text1a;
+        editor_style.text_body.base_attrs.font_family = self.theme.font_family.clone();
+        editor_style.text_body.base_attrs.font_weight = self.theme.font_weight;
+        editor_style.back_color = self.theme.colors.back2;
+        editor_style.padding_t = Pixels(self.theme.spacing);
+        editor_style.padding_b = Pixels(self.theme.spacing);
+        editor_style.padding_l = Pixels(self.theme.spacing);
+        editor_style.padding_r = Pixels(self.theme.spacing);
 
-            if let Some(border_size) = self.theme.border {
-                style.border_size_t = Pixels(border_size);
-                style.border_size_b = Pixels(border_size);
-                style.border_size_l = Pixels(border_size);
-                style.border_size_r = Pixels(border_size);
-                style.border_color_t = self.theme.colors.border1;
-                style.border_color_b = self.theme.colors.border1;
-                style.border_color_l = self.theme.colors.border1;
-                style.border_color_r = self.theme.colors.border1;
-            }
+        if let Some(border_size) = self.theme.border {
+            container_style.border_size_t = Pixels(border_size);
+            container_style.border_size_b = Pixels(border_size);
+            container_style.border_size_l = Pixels(border_size);
+            container_style.border_size_r = Pixels(border_size);
+            container_style.border_color_t = self.theme.colors.border1;
+            container_style.border_color_b = self.theme.colors.border1;
+            container_style.border_color_l = self.theme.colors.border1;
+            container_style.border_color_r = self.theme.colors.border1;
+        }
 
-            if let Some(border_radius) = self.theme.roundness {
-                style.border_radius_tl = Pixels(border_radius);
-                style.border_radius_tr = Pixels(border_radius);
-                style.border_radius_bl = Pixels(border_radius);
-                style.border_radius_br = Pixels(border_radius);
-            }
-        });
+        if let Some(border_radius) = self.theme.roundness {
+            container_style.border_radius_tl = Pixels(border_radius);
+            container_style.border_radius_tr = Pixels(border_radius);
+            container_style.border_radius_bl = Pixels(border_radius);
+            container_style.border_radius_br = Pixels(border_radius);
+            editor_style.border_radius_tl = Pixels(border_radius);
+        }
+
+        Bin::style_update_batch([
+            (&self.container, container_style),
+            (&self.editor, editor_style),
+        ]);
     }
 }

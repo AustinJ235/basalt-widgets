@@ -1003,7 +1003,7 @@ impl ScrollBar {
             }
         }
 
-        if self.theme.roundness.is_some() {
+        if let Some(border_radius) = self.theme.roundness {
             match self.props.axis {
                 ScrollAxis::X => {
                     bar_style.border_radius_tl = PctOfHeight(50.0);
@@ -1017,6 +1017,58 @@ impl ScrollBar {
                     bar_style.border_radius_bl = PctOfWidth(50.0);
                     bar_style.border_radius_br = PctOfWidth(50.0);
                 },
+            }
+
+            // TODO: This is a workaround!
+            //       Since Bin's don't take into account border radius when cropping, this tries
+            //       to guess the container's border radius, so it still displays correctly.
+
+            let unit_val_is_zero =
+                |val: basalt::interface::UnitValue| val.px_width([100.0; 2]).unwrap_or(0.0) == 0.0;
+
+            match (
+                self.props.placement.pos_from_t.is_defined(),
+                self.props.placement.pos_from_b.is_defined(),
+                self.props.placement.pos_from_l.is_defined(),
+                self.props.placement.pos_from_r.is_defined(),
+            ) {
+                (false, true, true, true) => {
+                    if unit_val_is_zero(self.props.placement.pos_from_l) {
+                        container_style.border_radius_bl = Pixels(border_radius);
+                    }
+
+                    if unit_val_is_zero(self.props.placement.pos_from_r) {
+                        container_style.border_radius_br = Pixels(border_radius);
+                    }
+                },
+                (true, false, true, true) => {
+                    if unit_val_is_zero(self.props.placement.pos_from_l) {
+                        container_style.border_radius_tl = Pixels(border_radius);
+                    }
+
+                    if unit_val_is_zero(self.props.placement.pos_from_r) {
+                        container_style.border_radius_tr = Pixels(border_radius);
+                    }
+                },
+                (true, true, false, true) => {
+                    if unit_val_is_zero(self.props.placement.pos_from_t) {
+                        container_style.border_radius_tr = Pixels(border_radius);
+                    }
+
+                    if unit_val_is_zero(self.props.placement.pos_from_b) {
+                        container_style.border_radius_br = Pixels(border_radius);
+                    }
+                },
+                (true, true, true, false) => {
+                    if unit_val_is_zero(self.props.placement.pos_from_t) {
+                        container_style.border_radius_tl = Pixels(border_radius);
+                    }
+
+                    if unit_val_is_zero(self.props.placement.pos_from_b) {
+                        container_style.border_radius_bl = Pixels(border_radius);
+                    }
+                },
+                _ => (), // TODO: ?
             }
         }
 
