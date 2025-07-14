@@ -255,34 +255,54 @@ where
         text_area
             .editor
             .on_press(Qwerty::ArrowLeft, move |_, _, _| {
-                cb_text_area.editor.style_modify(|style| {
-                    style.text_body.cursor =
-                        match style.text_body.cursor_prev(style.text_body.cursor) {
-                            TextCursor::Empty | TextCursor::None => style.text_body.cursor,
-                            TextCursor::Position(cursor) => cursor.into(),
-                        };
-                });
-
-                cb_text_area.reset_cursor_blink();
+                cb_text_area.move_cursor_left();
                 Default::default()
             });
+
+        let cb_text_area = text_area.clone();
+
+        window
+            .basalt_ref()
+            .input_ref()
+            .hook()
+            .bin(&text_area.editor)
+            .on_hold()
+            .keys(Qwerty::ArrowLeft)
+            .delay(Some(Duration::from_millis(600)))
+            .interval(Duration::from_millis(40))
+            .call(move |_, _, _| {
+                cb_text_area.move_cursor_left();
+                Default::default()
+            })
+            .finish()
+            .unwrap();
 
         let cb_text_area = text_area.clone();
 
         text_area
             .editor
             .on_press(Qwerty::ArrowRight, move |_, _, _| {
-                cb_text_area.editor.style_modify(|style| {
-                    style.text_body.cursor =
-                        match style.text_body.cursor_next(style.text_body.cursor) {
-                            TextCursor::Empty | TextCursor::None => style.text_body.cursor,
-                            TextCursor::Position(cursor) => cursor.into(),
-                        };
-                });
-
-                cb_text_area.reset_cursor_blink();
+                cb_text_area.move_cursor_right();
                 Default::default()
             });
+
+        let cb_text_area = text_area.clone();
+
+        window
+            .basalt_ref()
+            .input_ref()
+            .hook()
+            .bin(&text_area.editor)
+            .on_hold()
+            .keys(Qwerty::ArrowRight)
+            .delay(Some(Duration::from_millis(600)))
+            .interval(Duration::from_millis(40))
+            .call(move |_, _, _| {
+                cb_text_area.move_cursor_right();
+                Default::default()
+            })
+            .finish()
+            .unwrap();
 
         let cb_text_area = text_area.clone();
 
@@ -313,12 +333,12 @@ where
             Default::default()
         });
 
-        text_area.editor.on_update(|container, _| {
+        /*text_area.editor.on_update(|container, _| {
             let cursor = container.style_inspect(|style| style.text_body.cursor);
             let bounds = container.get_text_cursor_bounds(cursor);
             println!("Cursor:        {:?}", cursor);
             println!("Cursor Bounds: {:?}", bounds);
-        });
+        });*/
 
         text_area.style_update(Some(self.text_body));
         text_area
@@ -376,6 +396,28 @@ impl TextArea {
             .basalt_ref()
             .interval_ref()
             .pause(self.state.lock().c_blink_intvl_hid.borrow().unwrap());
+    }
+
+    fn move_cursor_left(&self) {
+        self.editor.style_modify(|style| {
+            style.text_body.cursor = match style.text_body.cursor_prev(style.text_body.cursor) {
+                TextCursor::Empty | TextCursor::None => style.text_body.cursor,
+                TextCursor::Position(cursor) => cursor.into(),
+            };
+        });
+
+        self.reset_cursor_blink();
+    }
+
+    fn move_cursor_right(&self) {
+        self.editor.style_modify(|style| {
+            style.text_body.cursor = match style.text_body.cursor_next(style.text_body.cursor) {
+                TextCursor::Empty | TextCursor::None => style.text_body.cursor,
+                TextCursor::Position(cursor) => cursor.into(),
+            };
+        });
+
+        self.reset_cursor_blink();
     }
 
     fn style_update(&self, text_body_op: Option<TextBody>) {
