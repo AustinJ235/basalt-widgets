@@ -5,7 +5,9 @@ use std::time::Duration;
 
 use basalt::input::{MouseButton, Qwerty};
 use basalt::interface::UnitValue::Pixels;
-use basalt::interface::{Bin, BinStyle, Position, TextBody, TextCursor, TextSelection};
+use basalt::interface::{
+    Bin, BinPostUpdate, BinStyle, Position, TextBody, TextCursor, TextSelection,
+};
 use basalt::interval::IntvlHookID;
 use parking_lot::ReentrantMutex;
 
@@ -307,28 +309,37 @@ where
         let cb_text_area = text_area.clone();
 
         text_area.editor.on_character(move |_, _, mut c| {
-            cb_text_area.editor.style_modify(|style| {
-                if c.is_backspace() {
-                    if matches!(style.text_body.cursor, TextCursor::None | TextCursor::Empty) {
-                        return;
-                    }
+            let cb2_text_area = cb_text_area.clone();
 
-                    style.text_body.cursor = style.text_body.cursor_delete(style.text_body.cursor);
+            cb_text_area.editor.style_modify_then(
+                |style| {
+                    if c.is_backspace() {
+                        if matches!(style.text_body.cursor, TextCursor::None | TextCursor::Empty) {
+                            return style.text_body.cursor;
+                        }
 
-                    cb_text_area.reset_cursor_blink();
-                } else {
-                    if c.0 == '\r' {
-                        c.0 = '\n';
-                    }
-
-                    style.text_body.cursor =
-                        style.text_body.cursor_insert(style.text_body.cursor, *c);
-
-                    if style.text_body.cursor != TextCursor::None {
+                        style.text_body.cursor =
+                            style.text_body.cursor_delete(style.text_body.cursor);
                         cb_text_area.reset_cursor_blink();
+                    } else {
+                        if c.0 == '\r' {
+                            c.0 = '\n';
+                        }
+
+                        style.text_body.cursor =
+                            style.text_body.cursor_insert(style.text_body.cursor, *c);
+
+                        if style.text_body.cursor != TextCursor::None {
+                            cb_text_area.reset_cursor_blink();
+                        }
                     }
-                }
-            });
+
+                    style.text_body.cursor
+                },
+                move |_editor, bpu, cursor| {
+                    cb2_text_area.check_cursor_in_view(bpu, cursor);
+                },
+            );
 
             Default::default()
         });
@@ -398,26 +409,78 @@ impl TextArea {
             .pause(self.state.lock().c_blink_intvl_hid.borrow().unwrap());
     }
 
-    fn move_cursor_left(&self) {
-        self.editor.style_modify(|style| {
-            style.text_body.cursor = match style.text_body.cursor_prev(style.text_body.cursor) {
-                TextCursor::Empty | TextCursor::None => style.text_body.cursor,
-                TextCursor::Position(cursor) => cursor.into(),
-            };
-        });
+    fn move_cursor_left(self: &Arc<Self>) {
+        let cb_text_area = self.clone();
+
+        self.editor.style_modify_then(
+            |style| {
+                style.text_body.cursor = match style.text_body.cursor_prev(style.text_body.cursor) {
+                    TextCursor::Empty | TextCursor::None => style.text_body.cursor,
+                    TextCursor::Position(cursor) => cursor.into(),
+                };
+
+                style.text_body.cursor
+            },
+            move |_editor, bpu, cursor| {
+                cb_text_area.check_cursor_in_view(bpu, cursor);
+            },
+        );
 
         self.reset_cursor_blink();
     }
 
-    fn move_cursor_right(&self) {
-        self.editor.style_modify(|style| {
-            style.text_body.cursor = match style.text_body.cursor_next(style.text_body.cursor) {
-                TextCursor::Empty | TextCursor::None => style.text_body.cursor,
-                TextCursor::Position(cursor) => cursor.into(),
-            };
-        });
+    fn move_cursor_right(self: &Arc<Self>) {
+        let cb_text_area = self.clone();
+
+        self.editor.style_modify_then(
+            |style| {
+                style.text_body.cursor = match style.text_body.cursor_next(style.text_body.cursor) {
+                    TextCursor::Empty | TextCursor::None => style.text_body.cursor,
+                    TextCursor::Position(cursor) => cursor.into(),
+                };
+
+                style.text_body.cursor
+            },
+            move |_editor, bpu, cursor| {
+                cb_text_area.check_cursor_in_view(bpu, cursor);
+            },
+        );
 
         self.reset_cursor_blink();
+    }
+
+    fn check_cursor_in_view(&self, bpu: &BinPostUpdate, cursor: TextCursor) {
+        // TODO: This may not be the best approach.
+        // FIXME: This somehow deadlocks sometimes, very rarely...
+
+        let cursor_bounds = match self.editor.get_text_cursor_bounds(cursor) {
+            Some(some) => some,
+            None => return,
+        };
+
+        let scroll_x = if cursor_bounds[0] < bpu.inner_bounds[0] {
+            Some(cursor_bounds[0] - bpu.inner_bounds[0] - self.theme.spacing)
+        } else if cursor_bounds[1] > bpu.inner_bounds[1] {
+            Some(cursor_bounds[1] - bpu.inner_bounds[1] + self.theme.spacing)
+        } else {
+            None
+        };
+
+        let scroll_y = if cursor_bounds[2] < bpu.inner_bounds[2] {
+            Some(cursor_bounds[2] - bpu.inner_bounds[2] - self.theme.spacing)
+        } else if cursor_bounds[3] > bpu.inner_bounds[3] {
+            Some(cursor_bounds[3] - bpu.inner_bounds[3] + self.theme.spacing)
+        } else {
+            None
+        };
+
+        if let Some(amt) = scroll_x {
+            self.h_scroll_b.scroll(amt);
+        }
+
+        if let Some(amt) = scroll_y {
+            self.v_scroll_b.scroll(amt);
+        }
     }
 
     fn style_update(&self, text_body_op: Option<TextBody>) {
