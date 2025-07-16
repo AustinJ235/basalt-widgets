@@ -113,7 +113,7 @@ where
         SelectBuilder::with_builder(self)
     }
 
-    /// Transition into building a [`TextBody`](crate::TextBody)
+    /// Transition into building a [`TextArea`](crate::TextArea)
     pub fn text_area(self) -> TextAreaBuilder<'a, C> {
         TextAreaBuilder::with_builder(self)
     }
