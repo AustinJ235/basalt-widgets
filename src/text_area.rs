@@ -313,6 +313,15 @@ where
 
             cb_text_area.editor.style_modify_then(
                 |style| {
+                    if let Some(selection) = style.text_body.selection.take() {
+                        style.text_body.cursor = style.text_body.selection_delete(selection);
+
+                        if c.is_backspace() {
+                            cb_text_area.reset_cursor_blink();
+                            return style.text_body.cursor;
+                        }
+                    }
+
                     if c.is_backspace() {
                         if matches!(style.text_body.cursor, TextCursor::None | TextCursor::Empty) {
                             return style.text_body.cursor;
@@ -320,6 +329,7 @@ where
 
                         style.text_body.cursor =
                             style.text_body.cursor_delete(style.text_body.cursor);
+
                         cb_text_area.reset_cursor_blink();
                     } else {
                         if c.0 == '\r' {
@@ -414,6 +424,11 @@ impl TextArea {
 
         self.editor.style_modify_then(
             |style| {
+                if let Some(selection) = style.text_body.selection.take() {
+                    style.text_body.cursor = selection.start.into();
+                    return style.text_body.cursor;
+                }
+
                 style.text_body.cursor = match style.text_body.cursor_prev(style.text_body.cursor) {
                     TextCursor::Empty | TextCursor::None => style.text_body.cursor,
                     TextCursor::Position(cursor) => cursor.into(),
@@ -434,6 +449,11 @@ impl TextArea {
 
         self.editor.style_modify_then(
             |style| {
+                if let Some(selection) = style.text_body.selection.take() {
+                    style.text_body.cursor = selection.end.into();
+                    return style.text_body.cursor;
+                }
+
                 style.text_body.cursor = match style.text_body.cursor_next(style.text_body.cursor) {
                     TextCursor::Empty | TextCursor::None => style.text_body.cursor,
                     TextCursor::Position(cursor) => cursor.into(),
@@ -451,7 +471,6 @@ impl TextArea {
 
     fn check_cursor_in_view(&self, bpu: &BinPostUpdate, cursor: TextCursor) {
         // TODO: This may not be the best approach.
-        // FIXME: This somehow deadlocks sometimes, very rarely...
 
         let cursor_bounds = match self.editor.get_text_cursor_bounds(cursor) {
             Some(some) => some,
