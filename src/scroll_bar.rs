@@ -226,6 +226,7 @@ where
                 target: RefCell::new(TargetState {
                     overflow: scroll,
                     scroll,
+                    size: 0.0,
                 }),
                 smooth: RefCell::new(SmoothState {
                     run: false,
@@ -457,6 +458,7 @@ struct State {
 struct TargetState {
     overflow: f32,
     scroll: f32,
+    size: f32,
 }
 
 struct SmoothState {
@@ -764,9 +766,16 @@ impl ScrollBar {
     }
 
     fn check_target_state(&self) -> bool {
-        let state = self.state.lock();
+        let target_bpu = self.props.target.post_update();
         let target_overflow = self.target_overflow();
+        let state = self.state.try_lock_for(Duration::from_secs(5)).unwrap();
         let mut target_state = state.target.borrow_mut();
+
+        let target_size = match self.props.axis {
+            ScrollAxis::X => target_bpu.tri[0] - target_bpu.tli[0],
+            ScrollAxis::Y => target_bpu.bli[1] - target_bpu.tli[1],
+        };
+
         let mut update = false;
 
         if target_state.overflow != target_overflow {
@@ -776,6 +785,11 @@ impl ScrollBar {
 
         if target_overflow < target_state.scroll {
             target_state.scroll = target_overflow;
+            update = true;
+        }
+
+        if target_state.size != target_size {
+            target_state.size = target_size;
             update = true;
         }
 
@@ -819,14 +833,31 @@ impl ScrollBar {
             ScrollAxis::Y => confine_bpu.bli[1] - confine_bpu.tli[1],
         };
 
-        let space_size =
-            (target_state.overflow / self.props.step).min(confine_size - self.theme.base_size);
+        let confine_sec_size = match self.props.axis {
+            ScrollAxis::X => confine_bpu.bli[1] - confine_bpu.tli[1],
+            ScrollAxis::Y => confine_bpu.tri[0] - confine_bpu.tli[0],
+        };
 
-        let scroll_per_px = target_state.overflow / space_size;
+        let [scroll_per_px, bar_size_pct, bar_offset_pct] =
+            if target_state.overflow > 0.0 && target_state.size > 0.0 {
+                let overflow_ratio = target_state.overflow / target_state.size;
+                let max_space_size = confine_size - confine_sec_size;
+
+                let space_size = ((-1.0 / ((0.25 * overflow_ratio) + 0.5) + 2.0)
+                    * (max_space_size / 2.0))
+                    .clamp(0.0, max_space_size);
+
+                let scroll_per_px = target_state.overflow / space_size;
+                let bar_size_pct = ((confine_size - space_size) / confine_size) * 100.0;
+                let bar_offset_pct = ((target_state.scroll / scroll_per_px) / confine_size) * 100.0;
+
+                [scroll_per_px, bar_size_pct, bar_offset_pct]
+            } else {
+                [0.0, 100.0, 0.0]
+            };
+
         state.drag.borrow_mut().scroll_per_px = scroll_per_px;
-        let bar_size_pct = ((confine_size - space_size) / confine_size) * 100.0;
 
-        let bar_offset_pct = ((target_state.scroll / scroll_per_px) / confine_size) * 100.0;
         let mut bar_style = self.bar.style_copy();
         let mut target_style = self.props.target.style_copy();
         let mut target_style_update = false;
