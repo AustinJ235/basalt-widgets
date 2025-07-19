@@ -867,19 +867,19 @@ impl ScrollBar {
                 if target_style.scroll_x != target_state.scroll {
                     target_style.scroll_x = target_state.scroll;
                     target_style_update = true;
-
-                    bar_style.pos_from_l = Percent(bar_offset_pct);
-                    bar_style.width = Percent(bar_size_pct);
                 }
+
+                bar_style.pos_from_l = Percent(bar_offset_pct);
+                bar_style.width = Percent(bar_size_pct);
             },
             ScrollAxis::Y => {
                 if target_style.scroll_y != target_state.scroll {
                     target_style.scroll_y = target_state.scroll;
                     target_style_update = true;
-
-                    bar_style.pos_from_t = Percent(bar_offset_pct);
-                    bar_style.height = Percent(bar_size_pct);
                 }
+
+                bar_style.pos_from_t = Percent(bar_offset_pct);
+                bar_style.height = Percent(bar_size_pct);
             },
         }
 
