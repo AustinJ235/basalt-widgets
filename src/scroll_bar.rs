@@ -14,7 +14,7 @@ use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
 use crate::button::{BtnHookColors, button_hooks};
-use crate::{Theme, WidgetContainer, WidgetPlacement};
+use crate::{Theme, WidgetContainer, WidgetPlacement, ulps_eq};
 
 /// Determintes the orientation and axis of the [`ScrollBar`].
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -494,8 +494,11 @@ impl ScrollBar {
         smooth_state.target = if !smooth_state.run {
             target_state.scroll + amt
         } else {
-            let direction_changes =
-                (smooth_state.target - target_state.scroll).signum() != amt.signum();
+            let direction_changes = !ulps_eq(
+                (smooth_state.target - target_state.scroll).signum(),
+                amt.signum(),
+                4,
+            );
 
             if self.props.accel {
                 if direction_changes {
@@ -517,7 +520,7 @@ impl ScrollBar {
             }
         };
 
-        if smooth_state.target == target_state.scroll {
+        if ulps_eq(smooth_state.target, target_state.scroll, 4) {
             return;
         }
 
@@ -544,19 +547,21 @@ impl ScrollBar {
         let target_state = state.target.borrow();
         let mut smooth_state = state.smooth.borrow_mut();
 
-        if target_state.scroll == to {
+        if ulps_eq(target_state.scroll, to, 4) {
             smooth_state.run = false;
             return;
         }
 
-        if !smooth_state.run {
-            smooth_state.run = true;
-            self.run_smooth_scroll();
-        }
+        if !ulps_eq(smooth_state.target, to, 4) {
+            if !smooth_state.run {
+                smooth_state.run = true;
+                self.run_smooth_scroll();
+            }
 
-        smooth_state.start = target_state.scroll;
-        smooth_state.target = to;
-        smooth_state.time = 0.0;
+            smooth_state.start = target_state.scroll;
+            smooth_state.target = to;
+            smooth_state.time = 0.0;
+        }
     }
 
     /// Scroll to the minimum.
@@ -587,7 +592,7 @@ impl ScrollBar {
             let mut target_state = state.target.borrow_mut();
 
             if amt.is_sign_negative() {
-                if target_state.scroll != 0.0 {
+                if !ulps_eq(target_state.scroll, 0.0, 4) {
                     if target_state.scroll + amt < 0.0 {
                         target_state.scroll = 0.0;
                     } else {
@@ -597,7 +602,7 @@ impl ScrollBar {
                     update = true;
                 }
             } else {
-                if target_state.scroll != target_state.overflow {
+                if !ulps_eq(target_state.scroll, target_state.overflow, 4) {
                     if target_state.scroll + amt > target_state.overflow {
                         target_state.scroll = target_state.overflow;
                     } else {
@@ -642,17 +647,17 @@ impl ScrollBar {
             }
 
             if to > target_state.overflow {
-                if target_state.scroll != target_state.overflow {
+                if !ulps_eq(target_state.scroll, target_state.overflow, 4) {
                     target_state.scroll = target_state.overflow;
                     update = true;
                 }
             } else if to < 0.0 {
-                if target_state.scroll != 0.0 {
+                if !ulps_eq(target_state.scroll, 0.0, 4) {
                     target_state.scroll = 0.0;
                     update = true;
                 }
             } else {
-                if target_state.scroll != to {
+                if !ulps_eq(target_state.scroll, to, 4) {
                     target_state.scroll = to;
                     update = true;
                 }
@@ -677,7 +682,7 @@ impl ScrollBar {
             let mut target_state = state.target.borrow_mut();
             state.smooth.borrow_mut().run = false;
 
-            if target_state.scroll != 0.0 {
+            if !ulps_eq(target_state.scroll, 0.0, 4) {
                 target_state.scroll = 0.0;
                 update = true;
             }
@@ -701,7 +706,7 @@ impl ScrollBar {
             let mut target_state = state.target.borrow_mut();
             state.smooth.borrow_mut().run = false;
 
-            if target_state.scroll != target_state.overflow {
+            if !ulps_eq(target_state.scroll, target_state.overflow, 4) {
                 target_state.scroll = target_state.overflow;
                 update = true;
             }
@@ -723,7 +728,17 @@ impl ScrollBar {
         }
     }
 
-    /// The amount of overflow the target has.
+    /// The inner size of the target on the axis that is controlled.
+    pub fn target_size(&self) -> f32 {
+        let target_bpu = self.props.target.post_update();
+
+        match self.props.axis {
+            ScrollAxis::X => target_bpu.tri[0] - target_bpu.tli[0],
+            ScrollAxis::Y => target_bpu.bli[1] - target_bpu.tli[1],
+        }
+    }
+
+    /// The amount of overflow of the target on the axis that is controlled.
     pub fn target_overflow(&self) -> f32 {
         match self.props.axis {
             ScrollAxis::X => self.props.target.calc_hori_overflow(),
@@ -745,7 +760,7 @@ impl ScrollBar {
         let state = self.state.lock();
         let smooth_state = state.smooth.borrow();
 
-        if !smooth_state.run {
+        if smooth_state.run {
             return smooth_state.target;
         }
 
@@ -766,19 +781,13 @@ impl ScrollBar {
     }
 
     fn check_target_state(&self) -> bool {
-        let target_bpu = self.props.target.post_update();
         let target_overflow = self.target_overflow();
+        let target_size = self.target_size();
         let state = self.state.try_lock_for(Duration::from_secs(5)).unwrap();
         let mut target_state = state.target.borrow_mut();
-
-        let target_size = match self.props.axis {
-            ScrollAxis::X => target_bpu.tri[0] - target_bpu.tli[0],
-            ScrollAxis::Y => target_bpu.bli[1] - target_bpu.tli[1],
-        };
-
         let mut update = false;
 
-        if target_state.overflow != target_overflow {
+        if !ulps_eq(target_state.overflow, target_overflow, 4) {
             target_state.overflow = target_overflow;
             update = true;
         }
@@ -788,7 +797,7 @@ impl ScrollBar {
             update = true;
         }
 
-        if target_state.size != target_size {
+        if !ulps_eq(target_state.size, target_size, 4) {
             target_state.size = target_size;
             update = true;
         }
@@ -864,7 +873,7 @@ impl ScrollBar {
 
         match self.props.axis {
             ScrollAxis::X => {
-                if target_style.scroll_x != target_state.scroll {
+                if !ulps_eq(target_style.scroll_x, target_state.scroll, 4) {
                     target_style.scroll_x = target_state.scroll;
                     target_style_update = true;
                 }
@@ -873,7 +882,7 @@ impl ScrollBar {
                 bar_style.width = Percent(bar_size_pct);
             },
             ScrollAxis::Y => {
-                if target_style.scroll_y != target_state.scroll {
+                if !ulps_eq(target_style.scroll_y, target_state.scroll, 4) {
                     target_style.scroll_y = target_state.scroll;
                     target_style_update = true;
                 }

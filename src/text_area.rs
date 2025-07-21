@@ -12,7 +12,7 @@ use basalt::interval::IntvlHookID;
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
-use crate::{ScrollAxis, ScrollBar, Theme, WidgetContainer, WidgetPlacement};
+use crate::{ScrollAxis, ScrollBar, Theme, WidgetContainer, WidgetPlacement, ulps_eq};
 
 /// Builder for [`TextArea`]
 pub struct TextAreaBuilder<'a, C> {
@@ -595,36 +595,67 @@ impl TextArea {
         self.reset_cursor_blink();
     }
 
-    fn check_cursor_in_view(&self, bpu: &BinPostUpdate, cursor: TextCursor) {
-        // TODO: This may not be the best approach.
-
-        let cursor_bounds = match self.editor.get_text_cursor_bounds(cursor) {
+    fn check_cursor_in_view(&self, editor_bpu: &BinPostUpdate, cursor: TextCursor) {
+        let mut cursor_bounds = match self.editor.get_text_cursor_bounds(cursor) {
             Some(some) => some,
             None => return,
         };
 
-        let scroll_x = if cursor_bounds[0] < bpu.inner_bounds[0] {
-            Some(cursor_bounds[0] - bpu.inner_bounds[0] - self.theme.spacing)
-        } else if cursor_bounds[1] > bpu.inner_bounds[1] {
-            Some(cursor_bounds[1] - bpu.inner_bounds[1] + self.theme.spacing)
+        let editor_size = [
+            editor_bpu.optimal_inner_bounds[1] - editor_bpu.optimal_inner_bounds[0],
+            editor_bpu.optimal_inner_bounds[3] - editor_bpu.optimal_inner_bounds[2],
+        ];
+
+        let text_offset = [
+            editor_bpu.optimal_inner_bounds[0] + editor_bpu.content_offset[0],
+            editor_bpu.optimal_inner_bounds[2] + editor_bpu.content_offset[1],
+        ];
+
+        cursor_bounds[0] -= text_offset[0];
+        cursor_bounds[1] -= text_offset[0];
+        cursor_bounds[2] -= text_offset[1];
+        cursor_bounds[3] -= text_offset[1];
+
+        let target_scroll = [
+            self.h_scroll_b.target_scroll(),
+            self.v_scroll_b.target_scroll(),
+        ];
+
+        let editor_overflow = [
+            self.h_scroll_b.target_overflow(),
+            self.v_scroll_b.target_overflow(),
+        ];
+
+        let scroll_to_x_op = if cursor_bounds[0] - target_scroll[0] - self.theme.spacing < 0.0 {
+            Some(cursor_bounds[0] - self.theme.spacing)
+        } else if cursor_bounds[1] - target_scroll[0] + self.theme.spacing > editor_size[0] {
+            Some(cursor_bounds[1] + self.theme.spacing - editor_size[0])
         } else {
             None
         };
 
-        let scroll_y = if cursor_bounds[2] < bpu.inner_bounds[2] {
-            Some(cursor_bounds[2] - bpu.inner_bounds[2] - self.theme.spacing)
-        } else if cursor_bounds[3] > bpu.inner_bounds[3] {
-            Some(cursor_bounds[3] - bpu.inner_bounds[3] + self.theme.spacing)
+        let scroll_to_y_op = if cursor_bounds[2] - target_scroll[1] - self.theme.spacing < 0.0 {
+            Some(cursor_bounds[2] - self.theme.spacing)
+        } else if cursor_bounds[3] - target_scroll[1] + self.theme.spacing > editor_size[1] {
+            Some(cursor_bounds[3] + self.theme.spacing - editor_size[1])
         } else {
             None
         };
 
-        if let Some(amt) = scroll_x {
-            self.h_scroll_b.scroll(amt);
+        if let Some(mut scroll_to_x) = scroll_to_x_op {
+            scroll_to_x = scroll_to_x.clamp(0.0, editor_overflow[0]);
+
+            if !ulps_eq(scroll_to_x, target_scroll[0], 8) {
+                self.h_scroll_b.scroll_to(scroll_to_x);
+            }
         }
 
-        if let Some(amt) = scroll_y {
-            self.v_scroll_b.scroll(amt);
+        if let Some(mut scroll_to_y) = scroll_to_y_op {
+            scroll_to_y = scroll_to_y.clamp(0.0, editor_overflow[1]);
+
+            if !ulps_eq(scroll_to_y, target_scroll[1], 8) {
+                self.v_scroll_b.scroll_to(scroll_to_y);
+            }
         }
     }
 
