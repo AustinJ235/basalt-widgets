@@ -308,6 +308,58 @@ where
 
         let cb_text_area = text_area.clone();
 
+        text_area.editor.on_press(Qwerty::ArrowUp, move |_, _, _| {
+            cb_text_area.move_cursor_up();
+            Default::default()
+        });
+
+        let cb_text_area = text_area.clone();
+
+        window
+            .basalt_ref()
+            .input_ref()
+            .hook()
+            .bin(&text_area.editor)
+            .on_hold()
+            .keys(Qwerty::ArrowUp)
+            .delay(Some(Duration::from_millis(600)))
+            .interval(Duration::from_millis(40))
+            .call(move |_, _, _| {
+                cb_text_area.move_cursor_up();
+                Default::default()
+            })
+            .finish()
+            .unwrap();
+
+        let cb_text_area = text_area.clone();
+
+        text_area
+            .editor
+            .on_press(Qwerty::ArrowDown, move |_, _, _| {
+                cb_text_area.move_cursor_down();
+                Default::default()
+            });
+
+        let cb_text_area = text_area.clone();
+
+        window
+            .basalt_ref()
+            .input_ref()
+            .hook()
+            .bin(&text_area.editor)
+            .on_hold()
+            .keys(Qwerty::ArrowDown)
+            .delay(Some(Duration::from_millis(600)))
+            .interval(Duration::from_millis(40))
+            .call(move |_, _, _| {
+                cb_text_area.move_cursor_down();
+                Default::default()
+            })
+            .finish()
+            .unwrap();
+
+        let cb_text_area = text_area.clone();
+
         text_area.editor.on_character(move |_, _, mut c| {
             let cb2_text_area = cb_text_area.clone();
 
@@ -465,6 +517,80 @@ impl TextArea {
                 cb_text_area.check_cursor_in_view(bpu, cursor);
             },
         );
+
+        self.reset_cursor_blink();
+    }
+
+    fn move_cursor_up(self: &Arc<Self>) {
+        let editor_style = self.editor.style();
+        let mut update_required = false;
+
+        let mut cursor = match editor_style.text_body.selection {
+            Some(selection) => {
+                update_required = true;
+                selection.start.into()
+            },
+            None => editor_style.text_body.cursor,
+        };
+
+        match self.editor.text_cursor_up(cursor) {
+            TextCursor::None | TextCursor::Empty => (),
+            TextCursor::Position(new_cursor) => {
+                cursor = new_cursor.into();
+                update_required = true;
+            },
+        }
+
+        if update_required {
+            let cb_text_area = self.clone();
+
+            self.editor.style_modify_then(
+                |style| {
+                    style.text_body.selection = None;
+                    style.text_body.cursor = cursor;
+                },
+                move |_editor, bpu, _| {
+                    cb_text_area.check_cursor_in_view(bpu, cursor);
+                },
+            );
+        }
+
+        self.reset_cursor_blink();
+    }
+
+    fn move_cursor_down(self: &Arc<Self>) {
+        let editor_style = self.editor.style();
+        let mut update_required = false;
+
+        let mut cursor = match editor_style.text_body.selection {
+            Some(selection) => {
+                update_required = true;
+                selection.start.into()
+            },
+            None => editor_style.text_body.cursor,
+        };
+
+        match self.editor.text_cursor_down(cursor) {
+            TextCursor::None | TextCursor::Empty => (),
+            TextCursor::Position(new_cursor) => {
+                cursor = new_cursor.into();
+                update_required = true;
+            },
+        }
+
+        if update_required {
+            let cb_text_area = self.clone();
+
+            self.editor.style_modify_then(
+                |style| {
+                    style.text_body.selection = None;
+                    style.text_body.cursor = cursor;
+                },
+                move |_editor, bpu, _| {
+                    cb_text_area.check_cursor_in_view(bpu, cursor);
+                },
+            );
+        }
 
         self.reset_cursor_blink();
     }
