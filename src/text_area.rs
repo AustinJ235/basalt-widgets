@@ -160,12 +160,18 @@ where
             .editor
             .on_press(MouseButton::Left, move |_, window, _| {
                 let cursor = cb_text_area.editor.get_text_cursor(window.cursor_pos());
+                let cb2_text_area = cb_text_area.clone();
 
-                cb_text_area.editor.style_modify(|style| {
-                    style.text_body.cursor = cursor;
-                    style.text_body.selection = None;
-                    style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
-                });
+                cb_text_area.editor.style_modify_then(
+                    |style| {
+                        style.text_body.cursor = cursor;
+                        style.text_body.selection = None;
+                        style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
+                    },
+                    move |_editor, bpu, _| {
+                        cb2_text_area.check_cursor_in_view(bpu, cursor);
+                    },
+                );
 
                 if cursor != TextCursor::None {
                     cb_text_area.reset_cursor_blink();
