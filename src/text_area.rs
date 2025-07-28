@@ -404,6 +404,20 @@ where
 
         let cb_text_area = text_area.clone();
 
+        text_area.editor.on_press(Qwerty::Home, move |_, _, _| {
+            cb_text_area.move_cursor_sol();
+            Default::default()
+        });
+
+        let cb_text_area = text_area.clone();
+
+        text_area.editor.on_press(Qwerty::End, move |_, _, _| {
+            cb_text_area.move_cursor_eol();
+            Default::default()
+        });
+
+        let cb_text_area = text_area.clone();
+
         text_area.editor.on_character(move |_, _, mut c| {
             let cb2_text_area = cb_text_area.clone();
 
@@ -635,6 +649,72 @@ impl TextArea {
                 },
             );
         }
+
+        self.reset_cursor_blink();
+    }
+
+    fn move_cursor_sol(self: &Arc<Self>) {
+        let editor_style = self.editor.style();
+
+        let cursor = match editor_style.text_body.selection {
+            Some(selection) => selection.start,
+            None => {
+                match editor_style.text_body.cursor {
+                    TextCursor::Empty | TextCursor::None => return,
+                    TextCursor::Position(cursor) => cursor,
+                }
+            },
+        };
+
+        let cursor = match self.editor.text_select_line(cursor.into()) {
+            Some(selection) => selection.start.into(),
+            None => return,
+        };
+
+        let cb_text_area = self.clone();
+
+        self.editor.style_modify_then(
+            |style| {
+                style.text_body.selection = None;
+                style.text_body.cursor = cursor;
+            },
+            move |_editor, bpu, _| {
+                cb_text_area.check_cursor_in_view(bpu, cursor);
+            },
+        );
+
+        self.reset_cursor_blink();
+    }
+
+    fn move_cursor_eol(self: &Arc<Self>) {
+        let editor_style = self.editor.style();
+
+        let cursor = match editor_style.text_body.selection {
+            Some(selection) => selection.end,
+            None => {
+                match editor_style.text_body.cursor {
+                    TextCursor::Empty | TextCursor::None => return,
+                    TextCursor::Position(cursor) => cursor,
+                }
+            },
+        };
+
+        let cursor = match self.editor.text_select_line(cursor.into()) {
+            Some(selection) => selection.end.into(),
+            None => return,
+        };
+
+        let cb_text_area = self.clone();
+
+        self.editor.style_modify_then(
+            |style| {
+                style.text_body.selection = None;
+                style.text_body.cursor = cursor;
+            },
+            move |_editor, bpu, _| {
+                cb_text_area.check_cursor_in_view(bpu, cursor);
+            },
+        );
 
         self.reset_cursor_blink();
     }
