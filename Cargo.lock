@@ -171,6 +171,7 @@ dependencies = [
  "quick_cache",
  "raw-window-handle",
  "smallvec",
+ "unicode-segmentation",
  "url",
  "vulkano",
  "vulkano-shaders",

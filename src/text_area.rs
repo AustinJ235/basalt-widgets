@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::atomic::{self, AtomicBool};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use basalt::input::{MouseButton, Qwerty};
 use basalt::interface::UnitValue::Pixels;
@@ -155,18 +155,56 @@ where
         let selecting = Arc::new(AtomicBool::new(false));
         let cb_text_area = text_area.clone();
         let cb_selecting = selecting.clone();
+        let mut consecutive_presses: u8 = 0;
+        let mut last_press_op: Option<Instant> = None;
 
         text_area
             .editor
             .on_press(MouseButton::Left, move |_, window, _| {
+                match last_press_op {
+                    Some(last_press) => {
+                        if last_press.elapsed() <= Duration::from_millis(400) {
+                            consecutive_presses += 1;
+                        } else {
+                            consecutive_presses = 1;
+                        }
+                    },
+                    None => {
+                        consecutive_presses = 1;
+                    },
+                }
+
+                last_press_op = Some(Instant::now());
                 let cursor = cb_text_area.editor.get_text_cursor(window.cursor_pos());
                 let cb2_text_area = cb_text_area.clone();
 
+                let line_select_op = match consecutive_presses {
+                    0 => unreachable!(),
+                    1..3 | 4.. => None,
+                    3 => cb_text_area.editor.text_select_line(cursor),
+                };
+
                 cb_text_area.editor.style_modify_then(
                     |style| {
-                        style.text_body.cursor = cursor;
-                        style.text_body.selection = None;
-                        style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
+                        match consecutive_presses {
+                            0 => unreachable!(),
+                            1 => {
+                                style.text_body.cursor = cursor;
+                                style.text_body.selection = None;
+                                style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
+                            },
+                            2 => {
+                                style.text_body.cursor = cursor;
+                                style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
+                                style.text_body.selection = style.text_body.select_word(cursor);
+                            },
+                            3 => {
+                                style.text_body.cursor = cursor;
+                                style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
+                                style.text_body.selection = line_select_op;
+                            },
+                            4.. => (),
+                        }
                     },
                     move |_editor, bpu, _| {
                         cb2_text_area.check_cursor_in_view(bpu, cursor);
