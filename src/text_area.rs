@@ -114,6 +114,7 @@ where
             h_scroll_b,
             state: ReentrantMutex::new(State {
                 c_blink_intvl_hid: RefCell::new(None),
+                clipboard: RefCell::new(String::new()),
             }),
         });
 
@@ -416,9 +417,44 @@ where
             Default::default()
         });
 
+        for key_combo in [[Qwerty::LCtrl, Qwerty::C], [Qwerty::RCtrl, Qwerty::C]] {
+            let cb_text_area = text_area.clone();
+
+            text_area.editor.on_press(key_combo, move |_, _, _| {
+                cb_text_area.copy();
+                Default::default()
+            });
+        }
+
+        for key_combo in [[Qwerty::LCtrl, Qwerty::X], [Qwerty::RCtrl, Qwerty::X]] {
+            let cb_text_area = text_area.clone();
+
+            text_area.editor.on_press(key_combo, move |_, _, _| {
+                cb_text_area.cut();
+                Default::default()
+            });
+        }
+
+        for key_combo in [[Qwerty::LCtrl, Qwerty::V], [Qwerty::RCtrl, Qwerty::V]] {
+            let cb_text_area = text_area.clone();
+
+            text_area.editor.on_press(key_combo, move |_, _, _| {
+                cb_text_area.paste();
+                Default::default()
+            });
+        }
+
         let cb_text_area = text_area.clone();
 
-        text_area.editor.on_character(move |_, _, mut c| {
+        text_area.editor.on_character(move |_, window, mut c| {
+            if window.is_key_pressed(Qwerty::LCtrl)
+                || window.is_key_pressed(Qwerty::LAlt)
+                || window.is_key_pressed(Qwerty::RCtrl)
+                || window.is_key_pressed(Qwerty::RAlt)
+            {
+                return Default::default();
+            }
+
             let cb2_text_area = cb_text_area.clone();
 
             cb_text_area.editor.style_modify_then(
@@ -489,6 +525,7 @@ pub struct TextArea {
 
 struct State {
     c_blink_intvl_hid: RefCell<Option<IntvlHookID>>,
+    clipboard: RefCell<String>,
 }
 
 impl TextArea {
@@ -717,6 +754,75 @@ impl TextArea {
         );
 
         self.reset_cursor_blink();
+    }
+
+    fn copy(self: &Arc<Self>) {
+        let editor_style = self.editor.style();
+
+        let selection = match editor_style.text_body.selection {
+            Some(some) => some,
+            None => return,
+        };
+
+        let value = editor_style.text_body.selection_string(selection);
+        *self.state.lock().clipboard.borrow_mut() = value;
+    }
+
+    fn cut(self: &Arc<Self>) {
+        let mut value_op = None;
+        let cb_text_area = self.clone();
+
+        self.editor.style_modify_then(
+            |style| {
+                let selection = match style.text_body.selection {
+                    Some(some) => some,
+                    None => return TextCursor::None,
+                };
+
+                let (cursor, value) = style.text_body.selection_take_string(selection);
+
+                if cursor == TextCursor::None || value.is_empty() {
+                    return TextCursor::None;
+                }
+
+                style.text_body.selection = None;
+                style.text_body.cursor = cursor;
+                value_op = Some(value);
+                cursor
+            },
+            move |_editor, bpu, cursor| {
+                cb_text_area.check_cursor_in_view(bpu, cursor);
+            },
+        );
+
+        if let Some(value) = value_op {
+            *self.state.lock().clipboard.borrow_mut() = value;
+            self.reset_cursor_blink();
+        }
+    }
+
+    fn paste(self: &Arc<Self>) {
+        let value = self.state.lock().clipboard.borrow().clone();
+        let cb_text_area = self.clone();
+
+        self.editor.style_modify_then(
+            |style| {
+                let cursor = match style.text_body.selection.take() {
+                    Some(selection) => style.text_body.selection_delete(selection),
+                    None => style.text_body.cursor,
+                };
+
+                if cursor == TextCursor::None {
+                    return TextCursor::None;
+                }
+
+                style.text_body.cursor = style.text_body.cursor_insert_string(cursor, value);
+                style.text_body.cursor
+            },
+            move |_editor, bpu, cursor| {
+                cb_text_area.check_cursor_in_view(bpu, cursor);
+            },
+        );
     }
 
     fn check_cursor_in_view(&self, editor_bpu: &BinPostUpdate, cursor: TextCursor) {
