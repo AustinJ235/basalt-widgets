@@ -44,7 +44,7 @@ pub use self::toggle_button::ToggleButton;
 pub trait WidgetContainer: Sized {
     fn container_bin(&self) -> &Arc<Bin>;
 
-    fn create_widget(&self) -> WidgetBuilder<Self> {
+    fn create_widget(&self) -> WidgetBuilder<'_, Self> {
         WidgetBuilder::from(self)
     }
 

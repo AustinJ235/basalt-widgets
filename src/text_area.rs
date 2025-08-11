@@ -185,32 +185,195 @@ where
                     3 => cb_text_area.editor.text_select_line(cursor),
                 };
 
-                cb_text_area.editor.style_modify_then(
-                    |style| {
-                        match consecutive_presses {
-                            0 => unreachable!(),
-                            1 => {
-                                style.text_body.cursor = cursor;
-                                style.text_body.selection = None;
-                                style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
-                            },
-                            2 => {
-                                style.text_body.cursor = cursor;
-                                style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
-                                style.text_body.selection = style.text_body.select_word(cursor);
-                            },
-                            3 => {
-                                style.text_body.cursor = cursor;
-                                style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
-                                style.text_body.selection = line_select_op;
-                            },
-                            4.. => (),
-                        }
-                    },
-                    move |_editor, bpu, _| {
-                        cb2_text_area.check_cursor_in_view(bpu, cursor);
-                    },
-                );
+                if window.is_key_pressed(Qwerty::LShift) || window.is_key_pressed(Qwerty::RShift) {
+                    cb_text_area.editor.style_modify_then(
+                        |style| {
+                            let old_cursor = style.text_body.cursor;
+                            style.text_body.cursor = cursor;
+                            style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
+
+                            match consecutive_presses {
+                                0 => unreachable!(),
+                                1 => {
+                                    match style.text_body.selection {
+                                        Some(selection) => {
+                                            style.text_body.selection =
+                                                Some(selection.extend(cursor));
+                                        },
+                                        None => {
+                                            if let Some(sel_cursor2) = cursor.into_position()
+                                                && let Some(sel_cursor1) =
+                                                    old_cursor.into_position()
+                                            {
+                                                if sel_cursor1 < sel_cursor2 {
+                                                    style.text_body.selection =
+                                                        Some(TextSelection {
+                                                            start: sel_cursor1,
+                                                            end: sel_cursor2,
+                                                        });
+                                                } else if sel_cursor1 > sel_cursor2 {
+                                                    style.text_body.selection =
+                                                        Some(TextSelection {
+                                                            start: sel_cursor2,
+                                                            end: sel_cursor1,
+                                                        });
+                                                }
+                                            }
+                                        },
+                                    }
+                                },
+                                2 => {
+                                    match style.text_body.selection {
+                                        Some(selection) => {
+                                            match style.text_body.select_word(cursor) {
+                                                Some(sel_word) => {
+                                                    let start = if sel_word.start < selection.start
+                                                    {
+                                                        sel_word.start
+                                                    } else {
+                                                        selection.start
+                                                    };
+
+                                                    let end = if sel_word.end > selection.end {
+                                                        sel_word.end
+                                                    } else {
+                                                        selection.end
+                                                    };
+
+                                                    style.text_body.selection =
+                                                        Some(TextSelection {
+                                                            start,
+                                                            end,
+                                                        });
+                                                },
+                                                None => {
+                                                    style.text_body.selection =
+                                                        Some(selection.extend(cursor));
+                                                },
+                                            }
+                                        },
+                                        None => {
+                                            if let Some(sel_word) =
+                                                style.text_body.select_word(cursor)
+                                            {
+                                                match old_cursor.into_position() {
+                                                    Some(cur_cursor) => {
+                                                        if cur_cursor < sel_word.start {
+                                                            style.text_body.selection =
+                                                                Some(TextSelection {
+                                                                    start: cur_cursor,
+                                                                    end: sel_word.end,
+                                                                });
+                                                        } else if cur_cursor > sel_word.end {
+                                                            style.text_body.selection =
+                                                                Some(TextSelection {
+                                                                    start: sel_word.start,
+                                                                    end: cur_cursor,
+                                                                });
+                                                        } else {
+                                                            style.text_body.selection =
+                                                                Some(sel_word);
+                                                        }
+                                                    },
+                                                    None => {
+                                                        style.text_body.selection = Some(sel_word);
+                                                    },
+                                                }
+                                            }
+                                        },
+                                    }
+                                },
+                                3 => {
+                                    match style.text_body.selection {
+                                        Some(selection) => {
+                                            match line_select_op {
+                                                Some(sel_line) => {
+                                                    let start = if sel_line.start < selection.start
+                                                    {
+                                                        sel_line.start
+                                                    } else {
+                                                        selection.start
+                                                    };
+
+                                                    let end = if sel_line.end > selection.end {
+                                                        sel_line.end
+                                                    } else {
+                                                        selection.end
+                                                    };
+
+                                                    style.text_body.selection =
+                                                        Some(TextSelection {
+                                                            start,
+                                                            end,
+                                                        });
+                                                },
+                                                None => {
+                                                    style.text_body.selection =
+                                                        Some(selection.extend(cursor));
+                                                },
+                                            }
+                                        },
+                                        None => {
+                                            if let Some(sel_line) = line_select_op {
+                                                match old_cursor.into_position() {
+                                                    Some(cur_cursor) => {
+                                                        if cur_cursor < sel_line.start {
+                                                            style.text_body.selection =
+                                                                Some(TextSelection {
+                                                                    start: cur_cursor,
+                                                                    end: sel_line.end,
+                                                                });
+                                                        } else if cur_cursor > sel_line.end {
+                                                            style.text_body.selection =
+                                                                Some(TextSelection {
+                                                                    start: sel_line.start,
+                                                                    end: cur_cursor,
+                                                                });
+                                                        } else {
+                                                            style.text_body.selection =
+                                                                Some(sel_line);
+                                                        }
+                                                    },
+                                                    None => {
+                                                        style.text_body.selection = Some(sel_line);
+                                                    },
+                                                }
+                                            }
+                                        },
+                                    }
+                                },
+                                4.. => (),
+                            }
+                        },
+                        move |_editor, bpu, _| {
+                            cb2_text_area.check_cursor_in_view(bpu, cursor);
+                        },
+                    );
+                } else {
+                    cb_text_area.editor.style_modify_then(
+                        |style| {
+                            style.text_body.cursor = cursor;
+                            style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
+
+                            match consecutive_presses {
+                                0 => unreachable!(),
+                                1 => {
+                                    style.text_body.selection = None;
+                                },
+                                2 => {
+                                    style.text_body.selection = style.text_body.select_word(cursor);
+                                },
+                                3 => {
+                                    style.text_body.selection = line_select_op;
+                                },
+                                4.. => (),
+                            }
+                        },
+                        move |_editor, bpu, _| {
+                            cb2_text_area.check_cursor_in_view(bpu, cursor);
+                        },
+                    );
+                }
 
                 if cursor != TextCursor::None {
                     cb_text_area.reset_cursor_blink();
@@ -440,6 +603,15 @@ where
 
             text_area.editor.on_press(key_combo, move |_, _, _| {
                 cb_text_area.paste();
+                Default::default()
+            });
+        }
+
+        for key_combo in [[Qwerty::LCtrl, Qwerty::A], [Qwerty::RCtrl, Qwerty::A]] {
+            let cb_text_area = text_area.clone();
+
+            text_area.editor.on_press(key_combo, move |_, _, _| {
+                cb_text_area.select_all();
                 Default::default()
             });
         }
@@ -823,6 +995,10 @@ impl TextArea {
                 cb_text_area.check_cursor_in_view(bpu, cursor);
             },
         );
+    }
+
+    fn select_all(self: &Arc<Self>) {
+        // TODO:
     }
 
     fn check_cursor_in_view(&self, editor_bpu: &BinPostUpdate, cursor: TextCursor) {
