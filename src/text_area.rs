@@ -426,36 +426,34 @@ where
                 return Default::default();
             }
 
-            // Note: `get_text_cursor` must be called outside of `style_modify`.
-            let sel_to_cursor = cb_text_area.editor.get_text_cursor(window.cursor_pos());
+            let text_body = cb_text_area.editor.text_body();
 
-            cb_text_area.editor.style_modify(|style| {
-                let sel_from = match style.text_body.cursor {
-                    TextCursor::None | TextCursor::Empty => return,
-                    TextCursor::Position(sel_from) => sel_from,
-                };
+            let select_from = match text_body.cursor() {
+                TextCursor::None | TextCursor::Empty => return Default::default(),
+                TextCursor::Position(cursor) => cursor,
+            };
 
-                match sel_to_cursor {
-                    TextCursor::None | TextCursor::Empty => {
-                        style.text_body.selection = None;
-                    },
-                    TextCursor::Position(sel_to) => {
-                        if sel_to == sel_from {
-                            style.text_body.selection = None;
-                        } else if sel_to > sel_from {
-                            style.text_body.selection = Some(TextSelection {
-                                start: sel_from,
-                                end: sel_to,
-                            });
-                        } else {
-                            style.text_body.selection = Some(TextSelection {
-                                start: sel_to,
-                                end: sel_from,
-                            });
-                        }
-                    },
-                }
-            });
+            let select_to = match text_body.get_cursor(window.cursor_pos()) {
+                TextCursor::None | TextCursor::Empty => {
+                    text_body.clear_selection();
+                    return Default::default();
+                },
+                TextCursor::Position(cursor) => cursor,
+            };
+
+            if select_from == select_to {
+                text_body.clear_selection();
+            } else if select_from < select_to {
+                text_body.set_selection(TextSelection {
+                    start: select_from,
+                    end: select_to,
+                });
+            } else {
+                text_body.set_selection(TextSelection {
+                    start: select_from,
+                    end: select_to,
+                });
+            }
 
             Default::default()
         });
@@ -739,192 +737,116 @@ impl TextArea {
     }
 
     fn move_cursor_left(self: &Arc<Self>) {
-        let cb_text_area = self.clone();
+        let text_body = self.editor.text_body();
 
-        self.editor.style_modify_then(
-            |style| {
-                if let Some(selection) = style.text_body.selection.take() {
-                    style.text_body.cursor = selection.start.into();
-                    return style.text_body.cursor;
+        match text_body.selection() {
+            Some(selection) => {
+                text_body.clear_selection();
+                text_body.set_cursor(selection.start.into());
+            },
+            None => {
+                let cursor_prev = text_body.cursor_prev(text_body.cursor());
+
+                if matches!(cursor_prev, TextCursor::Position(..)) {
+                    text_body.set_cursor(cursor_prev);
                 }
+            }
+        }
 
-                style.text_body.cursor = match style.text_body.cursor_prev(style.text_body.cursor) {
-                    TextCursor::Empty | TextCursor::None => style.text_body.cursor,
-                    TextCursor::Position(cursor) => cursor.into(),
-                };
-
-                style.text_body.cursor
-            },
-            move |_editor, bpu, cursor| {
-                cb_text_area.check_cursor_in_view(bpu, cursor);
-            },
-        );
-
+        // self.check_cursor_in_view(bpu, text_body.cursor());
         self.reset_cursor_blink();
     }
 
     fn move_cursor_right(self: &Arc<Self>) {
-        let cb_text_area = self.clone();
+        let text_body = self.editor.text_body();
 
-        self.editor.style_modify_then(
-            |style| {
-                if let Some(selection) = style.text_body.selection.take() {
-                    style.text_body.cursor = selection.end.into();
-                    return style.text_body.cursor;
+        match text_body.selection() {
+            Some(selection) => {
+                text_body.clear_selection();
+                text_body.set_cursor(selection.start.into());
+            },
+            None => {
+                let cursor_next = text_body.cursor_next(text_body.cursor());
+
+                if matches!(cursor_next, TextCursor::Position(..)) {
+                    text_body.set_cursor(cursor_next);
                 }
+            }
+        }
 
-                style.text_body.cursor = match style.text_body.cursor_next(style.text_body.cursor) {
-                    TextCursor::Empty | TextCursor::None => style.text_body.cursor,
-                    TextCursor::Position(cursor) => cursor.into(),
-                };
-
-                style.text_body.cursor
-            },
-            move |_editor, bpu, cursor| {
-                cb_text_area.check_cursor_in_view(bpu, cursor);
-            },
-        );
-
+        // self.check_cursor_in_view(bpu, text_body.cursor());
         self.reset_cursor_blink();
     }
 
     fn move_cursor_up(self: &Arc<Self>) {
-        let editor_style = self.editor.style();
-        let mut update_required = false;
+        let text_body = self.editor.text_body();
 
-        let mut cursor = match editor_style.text_body.selection {
-            Some(selection) => {
-                update_required = true;
-                selection.start.into()
-            },
-            None => editor_style.text_body.cursor,
-        };
-
-        match self.editor.text_cursor_up(cursor) {
-            TextCursor::None | TextCursor::Empty => (),
-            TextCursor::Position(new_cursor) => {
-                cursor = new_cursor.into();
-                update_required = true;
-            },
+        if let Some(selection) = text_body.selection() {
+            text_body.clear_selection();
+            text_body.set_cursor(selection.start.into());
         }
 
-        if update_required {
-            let cb_text_area = self.clone();
+        let cursor_up = text_body.cursor_up(text_body.cursor(), true);
 
-            self.editor.style_modify_then(
-                |style| {
-                    style.text_body.selection = None;
-                    style.text_body.cursor = cursor;
-                },
-                move |_editor, bpu, _| {
-                    cb_text_area.check_cursor_in_view(bpu, cursor);
-                },
-            );
+        if matches!(cursor_up, TextCursor::Position(..)) {
+            text_body.set_cursor(cursor_up);
         }
 
+        // self.check_cursor_in_view(bpu, text_body.cursor());
         self.reset_cursor_blink();
     }
 
     fn move_cursor_down(self: &Arc<Self>) {
-        let editor_style = self.editor.style();
-        let mut update_required = false;
+        let text_body = self.editor.text_body();
 
-        let mut cursor = match editor_style.text_body.selection {
-            Some(selection) => {
-                update_required = true;
-                selection.start.into()
-            },
-            None => editor_style.text_body.cursor,
-        };
-
-        match self.editor.text_cursor_down(cursor) {
-            TextCursor::None | TextCursor::Empty => (),
-            TextCursor::Position(new_cursor) => {
-                cursor = new_cursor.into();
-                update_required = true;
-            },
+        if let Some(selection) = text_body.selection() {
+            text_body.clear_selection();
+            text_body.set_cursor(selection.end.into());
         }
 
-        if update_required {
-            let cb_text_area = self.clone();
+        let cursor_down = text_body.cursor_down(ext_body.cursor(), true);
 
-            self.editor.style_modify_then(
-                |style| {
-                    style.text_body.selection = None;
-                    style.text_body.cursor = cursor;
-                },
-                move |_editor, bpu, _| {
-                    cb_text_area.check_cursor_in_view(bpu, cursor);
-                },
-            );
+        if matches!(cursor_down, TextCursor::Position(..)) {
+            text_body.set_cursor(cursor_down);
         }
 
+        // self.check_cursor_in_view(bpu, text_body.cursor());
         self.reset_cursor_blink();
     }
 
     fn move_cursor_sol(self: &Arc<Self>) {
-        let editor_style = self.editor.style();
+        let text_body = self.editor.text_body();
 
-        let cursor = match editor_style.text_body.selection {
-            Some(selection) => selection.start,
-            None => {
-                match editor_style.text_body.cursor {
-                    TextCursor::Empty | TextCursor::None => return,
-                    TextCursor::Position(cursor) => cursor,
-                }
-            },
-        };
+        if let Some(selection) = text_body.selection() {
+            text_body.clear_selection();
+            text_body.set_cursor(selection.start.into());
+        }
+        
+        let cursor_sol = text_body.cursor_line_start(text_body.cursor(), true);
 
-        let cursor = match self.editor.text_select_line(cursor.into()) {
-            Some(selection) => selection.start.into(),
-            None => return,
-        };
+        if matches!(cursor_sol, TextCursor::Position(..)) {
+            text_body.set_cursor(cursor_sol);
+        }
 
-        let cb_text_area = self.clone();
-
-        self.editor.style_modify_then(
-            |style| {
-                style.text_body.selection = None;
-                style.text_body.cursor = cursor;
-            },
-            move |_editor, bpu, _| {
-                cb_text_area.check_cursor_in_view(bpu, cursor);
-            },
-        );
-
+        // cb_text_area.check_cursor_in_view(bpu, cursor);
         self.reset_cursor_blink();
     }
 
     fn move_cursor_eol(self: &Arc<Self>) {
-        let editor_style = self.editor.style();
+        let text_body = self.editor.text_body();
 
-        let cursor = match editor_style.text_body.selection {
-            Some(selection) => selection.end,
-            None => {
-                match editor_style.text_body.cursor {
-                    TextCursor::Empty | TextCursor::None => return,
-                    TextCursor::Position(cursor) => cursor,
-                }
-            },
-        };
+        if let Some(selection) = text_body.selection() {
+            text_body.clear_selection();
+            text_body.set_cursor(selection.end.into());
+        }
+        
+        let cursor_eol = text_body.cursor_line_end(text_body.cursor(), true);
 
-        let cursor = match self.editor.text_select_line(cursor.into()) {
-            Some(selection) => selection.end.into(),
-            None => return,
-        };
+        if matches!(cursor_eol, TextCursor::Position(..)) {
+            text_body.set_cursor(cursor_eol);
+        }
 
-        let cb_text_area = self.clone();
-
-        self.editor.style_modify_then(
-            |style| {
-                style.text_body.selection = None;
-                style.text_body.cursor = cursor;
-            },
-            move |_editor, bpu, _| {
-                cb_text_area.check_cursor_in_view(bpu, cursor);
-            },
-        );
-
+        // cb_text_area.check_cursor_in_view(bpu, cursor);
         self.reset_cursor_blink();
     }
 
