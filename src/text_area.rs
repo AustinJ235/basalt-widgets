@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 use basalt::input::{MouseButton, Qwerty};
 use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{
-    Bin, BinPostUpdate, BinStyle, Position, TextBody, TextCursor, TextSelection,
+    Bin, BinPostUpdate, BinStyle, Position, TextAttrs, TextBody, TextCursor, TextSelection,
+    TextSpan,
 };
 use basalt::interval::IntvlHookID;
 use parking_lot::ReentrantMutex;
@@ -51,9 +52,23 @@ where
         }
     }
 
-    /// Set inital text body.
-    pub fn text_body(mut self, text_body: TextBody) -> Self {
-        self.text_body = text_body;
+    /// Set the inital text.
+    pub fn with_text<T>(mut self, text: T) -> Self
+    where
+        T: Into<String>,
+    {
+        if self.text_body.spans.is_empty() {
+            self.text_body.spans.push(TextSpan::from(text.into()));
+        } else {
+            self.text_body.spans[0] = TextSpan::from(text.into());
+        }
+
+        self
+    }
+
+    /// Set the [`TextAttrs`] used.
+    pub fn with_attrs(mut self, attrs: TextAttrs) -> Self {
+        self.text_body.base_attrs = attrs;
         self
     }
 
@@ -164,8 +179,12 @@ where
             .on_press(MouseButton::Left, move |_, window, _| {
                 match last_press_op {
                     Some(last_press) => {
-                        if last_press.elapsed() <= Duration::from_millis(400) {
+                        if last_press.elapsed() <= Duration::from_millis(300) {
                             consecutive_presses += 1;
+
+                            if consecutive_presses > 3 {
+                                consecutive_presses = 1;
+                            }
                         } else {
                             consecutive_presses = 1;
                         }
@@ -176,208 +195,75 @@ where
                 }
 
                 last_press_op = Some(Instant::now());
-                let cursor = cb_text_area.editor.get_text_cursor(window.cursor_pos());
-                let cb2_text_area = cb_text_area.clone();
 
-                let line_select_op = match consecutive_presses {
-                    0 => unreachable!(),
-                    1..3 | 4.. => None,
-                    3 => cb_text_area.editor.text_select_line(cursor),
-                };
+                let extends_selection =
+                    window.is_key_pressed(Qwerty::LShift) || window.is_key_pressed(Qwerty::RShift);
 
-                if window.is_key_pressed(Qwerty::LShift) || window.is_key_pressed(Qwerty::RShift) {
-                    cb_text_area.editor.style_modify_then(
-                        |style| {
-                            let old_cursor = style.text_body.cursor;
-                            style.text_body.cursor = cursor;
-                            style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
+                let text_body = cb_text_area.editor.text_body();
+                let cursor = text_body.get_cursor(window.cursor_pos());
 
-                            match consecutive_presses {
-                                0 => unreachable!(),
-                                1 => {
-                                    match style.text_body.selection {
-                                        Some(selection) => {
-                                            style.text_body.selection =
-                                                Some(selection.extend(cursor));
-                                        },
-                                        None => {
-                                            if let Some(sel_cursor2) = cursor.into_position()
-                                                && let Some(sel_cursor1) =
-                                                    old_cursor.into_position()
-                                            {
-                                                if sel_cursor1 < sel_cursor2 {
-                                                    style.text_body.selection =
-                                                        Some(TextSelection {
-                                                            start: sel_cursor1,
-                                                            end: sel_cursor2,
-                                                        });
-                                                } else if sel_cursor1 > sel_cursor2 {
-                                                    style.text_body.selection =
-                                                        Some(TextSelection {
-                                                            start: sel_cursor2,
-                                                            end: sel_cursor1,
-                                                        });
-                                                }
-                                            }
-                                        },
-                                    }
-                                },
-                                2 => {
-                                    match style.text_body.selection {
-                                        Some(selection) => {
-                                            match style.text_body.select_word(cursor) {
-                                                Some(sel_word) => {
-                                                    let start = if sel_word.start < selection.start
-                                                    {
-                                                        sel_word.start
-                                                    } else {
-                                                        selection.start
-                                                    };
-
-                                                    let end = if sel_word.end > selection.end {
-                                                        sel_word.end
-                                                    } else {
-                                                        selection.end
-                                                    };
-
-                                                    style.text_body.selection =
-                                                        Some(TextSelection {
-                                                            start,
-                                                            end,
-                                                        });
-                                                },
-                                                None => {
-                                                    style.text_body.selection =
-                                                        Some(selection.extend(cursor));
-                                                },
-                                            }
-                                        },
-                                        None => {
-                                            if let Some(sel_word) =
-                                                style.text_body.select_word(cursor)
-                                            {
-                                                match old_cursor.into_position() {
-                                                    Some(cur_cursor) => {
-                                                        if cur_cursor < sel_word.start {
-                                                            style.text_body.selection =
-                                                                Some(TextSelection {
-                                                                    start: cur_cursor,
-                                                                    end: sel_word.end,
-                                                                });
-                                                        } else if cur_cursor > sel_word.end {
-                                                            style.text_body.selection =
-                                                                Some(TextSelection {
-                                                                    start: sel_word.start,
-                                                                    end: cur_cursor,
-                                                                });
-                                                        } else {
-                                                            style.text_body.selection =
-                                                                Some(sel_word);
-                                                        }
-                                                    },
-                                                    None => {
-                                                        style.text_body.selection = Some(sel_word);
-                                                    },
-                                                }
-                                            }
-                                        },
-                                    }
-                                },
-                                3 => {
-                                    match style.text_body.selection {
-                                        Some(selection) => {
-                                            match line_select_op {
-                                                Some(sel_line) => {
-                                                    let start = if sel_line.start < selection.start
-                                                    {
-                                                        sel_line.start
-                                                    } else {
-                                                        selection.start
-                                                    };
-
-                                                    let end = if sel_line.end > selection.end {
-                                                        sel_line.end
-                                                    } else {
-                                                        selection.end
-                                                    };
-
-                                                    style.text_body.selection =
-                                                        Some(TextSelection {
-                                                            start,
-                                                            end,
-                                                        });
-                                                },
-                                                None => {
-                                                    style.text_body.selection =
-                                                        Some(selection.extend(cursor));
-                                                },
-                                            }
-                                        },
-                                        None => {
-                                            if let Some(sel_line) = line_select_op {
-                                                match old_cursor.into_position() {
-                                                    Some(cur_cursor) => {
-                                                        if cur_cursor < sel_line.start {
-                                                            style.text_body.selection =
-                                                                Some(TextSelection {
-                                                                    start: cur_cursor,
-                                                                    end: sel_line.end,
-                                                                });
-                                                        } else if cur_cursor > sel_line.end {
-                                                            style.text_body.selection =
-                                                                Some(TextSelection {
-                                                                    start: sel_line.start,
-                                                                    end: cur_cursor,
-                                                                });
-                                                        } else {
-                                                            style.text_body.selection =
-                                                                Some(sel_line);
-                                                        }
-                                                    },
-                                                    None => {
-                                                        style.text_body.selection = Some(sel_line);
-                                                    },
-                                                }
-                                            }
-                                        },
-                                    }
-                                },
-                                4.. => (),
-                            }
-                        },
-                        move |_editor, bpu, _| {
-                            cb2_text_area.check_cursor_in_view(bpu, cursor);
-                        },
-                    );
-                } else {
-                    cb_text_area.editor.style_modify_then(
-                        |style| {
-                            style.text_body.cursor = cursor;
-                            style.text_body.cursor_color = cb_text_area.theme.colors.text1a;
-
-                            match consecutive_presses {
-                                0 => unreachable!(),
-                                1 => {
-                                    style.text_body.selection = None;
-                                },
-                                2 => {
-                                    style.text_body.selection = style.text_body.select_word(cursor);
-                                },
-                                3 => {
-                                    style.text_body.selection = line_select_op;
-                                },
-                                4.. => (),
-                            }
-                        },
-                        move |_editor, bpu, _| {
-                            cb2_text_area.check_cursor_in_view(bpu, cursor);
-                        },
-                    );
+                if !matches!(cursor, TextCursor::Position(..)) {
+                    return Default::default();
                 }
 
-                if cursor != TextCursor::None {
+                match consecutive_presses {
+                    1 => {
+                        if extends_selection {
+                            match text_body.selection() {
+                                Some(existing_selection) => {
+                                    text_body.set_selection(existing_selection.extend(cursor));
+                                },
+                                None => {
+                                    text_body.set_cursor(cursor);
+                                },
+                            }
+                        } else {
+                            text_body.clear_selection();
+                            text_body.set_cursor(cursor);
+                        }
+                    },
+                    2 | 3 => {
+                        match match consecutive_presses {
+                            2 => text_body.cursor_select_word(cursor),
+                            3 => text_body.cursor_select_line(cursor, true),
+                            _ => unreachable!(),
+                        } {
+                            Some(selection) => {
+                                if extends_selection {
+                                    match text_body.selection() {
+                                        Some(existing_selection) => {
+                                            text_body.set_selection(
+                                                selection.extend(existing_selection),
+                                            );
+                                        },
+                                        None => {
+                                            text_body.set_selection(selection);
+                                        },
+                                    }
+                                } else {
+                                    text_body.set_selection(selection);
+                                }
+                            },
+                            None => {
+                                text_body.clear_selection();
+                                text_body.set_cursor(cursor);
+                            },
+                        }
+                    },
+                    0 | 4.. => unreachable!(),
+                }
+
+                if matches!(text_body.cursor(), TextCursor::Position(..)) {
                     cb_text_area.reset_cursor_blink();
                     cb_selecting.store(true, atomic::Ordering::Relaxed);
+
+                    if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+                        let cb_text_area2 = cb_text_area.clone();
+
+                        text_body.bin_on_update(move |_, editor_bpu| {
+                            cb_text_area2.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                        });
+                    }
                 }
 
                 Default::default()
@@ -426,36 +312,34 @@ where
                 return Default::default();
             }
 
-            // Note: `get_text_cursor` must be called outside of `style_modify`.
-            let sel_to_cursor = cb_text_area.editor.get_text_cursor(window.cursor_pos());
+            let text_body = cb_text_area.editor.text_body();
 
-            cb_text_area.editor.style_modify(|style| {
-                let sel_from = match style.text_body.cursor {
-                    TextCursor::None | TextCursor::Empty => return,
-                    TextCursor::Position(sel_from) => sel_from,
-                };
+            let select_from = match text_body.cursor() {
+                TextCursor::None | TextCursor::Empty => return Default::default(),
+                TextCursor::Position(cursor) => cursor,
+            };
 
-                match sel_to_cursor {
-                    TextCursor::None | TextCursor::Empty => {
-                        style.text_body.selection = None;
-                    },
-                    TextCursor::Position(sel_to) => {
-                        if sel_to == sel_from {
-                            style.text_body.selection = None;
-                        } else if sel_to > sel_from {
-                            style.text_body.selection = Some(TextSelection {
-                                start: sel_from,
-                                end: sel_to,
-                            });
-                        } else {
-                            style.text_body.selection = Some(TextSelection {
-                                start: sel_to,
-                                end: sel_from,
-                            });
-                        }
-                    },
-                }
-            });
+            let select_to = match text_body.get_cursor(window.cursor_pos()) {
+                TextCursor::None | TextCursor::Empty => {
+                    text_body.clear_selection();
+                    return Default::default();
+                },
+                TextCursor::Position(cursor) => cursor,
+            };
+
+            if select_from == select_to {
+                text_body.clear_selection();
+            } else if select_from < select_to {
+                text_body.set_selection(TextSelection {
+                    start: select_from,
+                    end: select_to,
+                });
+            } else {
+                text_body.set_selection(TextSelection {
+                    start: select_to,
+                    end: select_from,
+                });
+            }
 
             Default::default()
         });
@@ -627,57 +511,38 @@ where
                 return Default::default();
             }
 
-            let cb2_text_area = cb_text_area.clone();
+            let text_body = cb_text_area.editor.text_body();
+            let mut selection_deleted = false;
 
-            cb_text_area.editor.style_modify_then(
-                |style| {
-                    if let Some(selection) = style.text_body.selection.take() {
-                        style.text_body.cursor = style.text_body.selection_delete(selection);
+            if let Some(selection) = text_body.selection() {
+                text_body.clear_selection();
+                text_body.set_cursor(text_body.selection_delete(selection));
+                selection_deleted = true;
+            }
 
-                        if c.is_backspace() {
-                            cb_text_area.reset_cursor_blink();
-                            return style.text_body.cursor;
-                        }
-                    }
+            if c.is_backspace() {
+                if !selection_deleted {
+                    text_body.set_cursor(text_body.cursor_delete(text_body.cursor()));
+                }
+            } else {
+                if c.0 == '\r' {
+                    c.0 = '\n';
+                }
 
-                    if c.is_backspace() {
-                        if matches!(style.text_body.cursor, TextCursor::None | TextCursor::Empty) {
-                            return style.text_body.cursor;
-                        }
+                text_body.set_cursor(text_body.cursor_insert(text_body.cursor(), *c));
+            }
 
-                        style.text_body.cursor =
-                            style.text_body.cursor_delete(style.text_body.cursor);
+            if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+                let cb_text_area2 = cb_text_area.clone();
 
-                        cb_text_area.reset_cursor_blink();
-                    } else {
-                        if c.0 == '\r' {
-                            c.0 = '\n';
-                        }
+                text_body.bin_on_update(move |_, editor_bpu| {
+                    cb_text_area2.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                });
+            }
 
-                        style.text_body.cursor =
-                            style.text_body.cursor_insert(style.text_body.cursor, *c);
-
-                        if style.text_body.cursor != TextCursor::None {
-                            cb_text_area.reset_cursor_blink();
-                        }
-                    }
-
-                    style.text_body.cursor
-                },
-                move |_editor, bpu, cursor| {
-                    cb2_text_area.check_cursor_in_view(bpu, cursor);
-                },
-            );
-
+            cb_text_area.reset_cursor_blink();
             Default::default()
         });
-
-        /*text_area.editor.on_update(|container, _| {
-            let cursor = container.style_inspect(|style| style.text_body.cursor);
-            let bounds = container.get_text_cursor_bounds(cursor);
-            println!("Cursor:        {:?}", cursor);
-            println!("Cursor Bounds: {:?}", bounds);
-        });*/
 
         text_area.style_update(Some(self.text_body));
         text_area
@@ -739,274 +604,223 @@ impl TextArea {
     }
 
     fn move_cursor_left(self: &Arc<Self>) {
-        let cb_text_area = self.clone();
+        let text_body = self.editor.text_body();
 
-        self.editor.style_modify_then(
-            |style| {
-                if let Some(selection) = style.text_body.selection.take() {
-                    style.text_body.cursor = selection.start.into();
-                    return style.text_body.cursor;
+        match text_body.selection() {
+            Some(selection) => {
+                text_body.clear_selection();
+                text_body.set_cursor(selection.start.into());
+            },
+            None => {
+                let cursor_prev = text_body.cursor_prev(text_body.cursor());
+
+                if matches!(cursor_prev, TextCursor::Position(..)) {
+                    text_body.set_cursor(cursor_prev);
                 }
-
-                style.text_body.cursor = match style.text_body.cursor_prev(style.text_body.cursor) {
-                    TextCursor::Empty | TextCursor::None => style.text_body.cursor,
-                    TextCursor::Position(cursor) => cursor.into(),
-                };
-
-                style.text_body.cursor
             },
-            move |_editor, bpu, cursor| {
-                cb_text_area.check_cursor_in_view(bpu, cursor);
-            },
-        );
+        }
+
+        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+            let text_area = self.clone();
+
+            text_body.bin_on_update(move |_, editor_bpu| {
+                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+            });
+        }
 
         self.reset_cursor_blink();
     }
 
     fn move_cursor_right(self: &Arc<Self>) {
-        let cb_text_area = self.clone();
+        let text_body = self.editor.text_body();
 
-        self.editor.style_modify_then(
-            |style| {
-                if let Some(selection) = style.text_body.selection.take() {
-                    style.text_body.cursor = selection.end.into();
-                    return style.text_body.cursor;
+        match text_body.selection() {
+            Some(selection) => {
+                text_body.clear_selection();
+                text_body.set_cursor(selection.start.into());
+            },
+            None => {
+                let cursor_next = text_body.cursor_next(text_body.cursor());
+
+                if matches!(cursor_next, TextCursor::Position(..)) {
+                    text_body.set_cursor(cursor_next);
                 }
-
-                style.text_body.cursor = match style.text_body.cursor_next(style.text_body.cursor) {
-                    TextCursor::Empty | TextCursor::None => style.text_body.cursor,
-                    TextCursor::Position(cursor) => cursor.into(),
-                };
-
-                style.text_body.cursor
             },
-            move |_editor, bpu, cursor| {
-                cb_text_area.check_cursor_in_view(bpu, cursor);
-            },
-        );
+        }
+
+        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+            let text_area = self.clone();
+
+            text_body.bin_on_update(move |_, editor_bpu| {
+                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+            });
+        }
 
         self.reset_cursor_blink();
     }
 
     fn move_cursor_up(self: &Arc<Self>) {
-        let editor_style = self.editor.style();
-        let mut update_required = false;
+        let text_body = self.editor.text_body();
 
-        let mut cursor = match editor_style.text_body.selection {
-            Some(selection) => {
-                update_required = true;
-                selection.start.into()
-            },
-            None => editor_style.text_body.cursor,
-        };
-
-        match self.editor.text_cursor_up(cursor) {
-            TextCursor::None | TextCursor::Empty => (),
-            TextCursor::Position(new_cursor) => {
-                cursor = new_cursor.into();
-                update_required = true;
-            },
+        if let Some(selection) = text_body.selection() {
+            text_body.clear_selection();
+            text_body.set_cursor(selection.start.into());
         }
 
-        if update_required {
-            let cb_text_area = self.clone();
+        let cursor_up = text_body.cursor_up(text_body.cursor(), true);
 
-            self.editor.style_modify_then(
-                |style| {
-                    style.text_body.selection = None;
-                    style.text_body.cursor = cursor;
-                },
-                move |_editor, bpu, _| {
-                    cb_text_area.check_cursor_in_view(bpu, cursor);
-                },
-            );
+        if matches!(cursor_up, TextCursor::Position(..)) {
+            text_body.set_cursor(cursor_up);
+        }
+
+        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+            let text_area = self.clone();
+
+            text_body.bin_on_update(move |_, editor_bpu| {
+                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+            });
         }
 
         self.reset_cursor_blink();
     }
 
     fn move_cursor_down(self: &Arc<Self>) {
-        let editor_style = self.editor.style();
-        let mut update_required = false;
+        let text_body = self.editor.text_body();
 
-        let mut cursor = match editor_style.text_body.selection {
-            Some(selection) => {
-                update_required = true;
-                selection.start.into()
-            },
-            None => editor_style.text_body.cursor,
-        };
-
-        match self.editor.text_cursor_down(cursor) {
-            TextCursor::None | TextCursor::Empty => (),
-            TextCursor::Position(new_cursor) => {
-                cursor = new_cursor.into();
-                update_required = true;
-            },
+        if let Some(selection) = text_body.selection() {
+            text_body.clear_selection();
+            text_body.set_cursor(selection.end.into());
         }
 
-        if update_required {
-            let cb_text_area = self.clone();
+        let cursor_down = text_body.cursor_down(text_body.cursor(), true);
 
-            self.editor.style_modify_then(
-                |style| {
-                    style.text_body.selection = None;
-                    style.text_body.cursor = cursor;
-                },
-                move |_editor, bpu, _| {
-                    cb_text_area.check_cursor_in_view(bpu, cursor);
-                },
-            );
+        if matches!(cursor_down, TextCursor::Position(..)) {
+            text_body.set_cursor(cursor_down);
+        }
+
+        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+            let text_area = self.clone();
+
+            text_body.bin_on_update(move |_, editor_bpu| {
+                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+            });
         }
 
         self.reset_cursor_blink();
     }
 
     fn move_cursor_sol(self: &Arc<Self>) {
-        let editor_style = self.editor.style();
+        let text_body = self.editor.text_body();
 
-        let cursor = match editor_style.text_body.selection {
-            Some(selection) => selection.start,
-            None => {
-                match editor_style.text_body.cursor {
-                    TextCursor::Empty | TextCursor::None => return,
-                    TextCursor::Position(cursor) => cursor,
-                }
-            },
-        };
+        if let Some(selection) = text_body.selection() {
+            text_body.clear_selection();
+            text_body.set_cursor(selection.start.into());
+        }
 
-        let cursor = match self.editor.text_select_line(cursor.into()) {
-            Some(selection) => selection.start.into(),
-            None => return,
-        };
+        let cursor_sol = text_body.cursor_line_start(text_body.cursor(), true);
 
-        let cb_text_area = self.clone();
+        if matches!(cursor_sol, TextCursor::Position(..)) {
+            text_body.set_cursor(cursor_sol);
+        }
 
-        self.editor.style_modify_then(
-            |style| {
-                style.text_body.selection = None;
-                style.text_body.cursor = cursor;
-            },
-            move |_editor, bpu, _| {
-                cb_text_area.check_cursor_in_view(bpu, cursor);
-            },
-        );
+        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+            let text_area = self.clone();
+
+            text_body.bin_on_update(move |_, editor_bpu| {
+                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+            });
+        }
 
         self.reset_cursor_blink();
     }
 
     fn move_cursor_eol(self: &Arc<Self>) {
-        let editor_style = self.editor.style();
+        let text_body = self.editor.text_body();
 
-        let cursor = match editor_style.text_body.selection {
-            Some(selection) => selection.end,
-            None => {
-                match editor_style.text_body.cursor {
-                    TextCursor::Empty | TextCursor::None => return,
-                    TextCursor::Position(cursor) => cursor,
-                }
-            },
-        };
+        if let Some(selection) = text_body.selection() {
+            text_body.clear_selection();
+            text_body.set_cursor(selection.end.into());
+        }
 
-        let cursor = match self.editor.text_select_line(cursor.into()) {
-            Some(selection) => selection.end.into(),
-            None => return,
-        };
+        let cursor_eol = text_body.cursor_line_end(text_body.cursor(), true);
 
-        let cb_text_area = self.clone();
+        if matches!(cursor_eol, TextCursor::Position(..)) {
+            text_body.set_cursor(cursor_eol);
+        }
 
-        self.editor.style_modify_then(
-            |style| {
-                style.text_body.selection = None;
-                style.text_body.cursor = cursor;
-            },
-            move |_editor, bpu, _| {
-                cb_text_area.check_cursor_in_view(bpu, cursor);
-            },
-        );
+        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+            let text_area = self.clone();
+
+            text_body.bin_on_update(move |_, editor_bpu| {
+                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+            });
+        }
 
         self.reset_cursor_blink();
     }
 
     fn copy(self: &Arc<Self>) {
-        let editor_style = self.editor.style();
+        let text_body = self.editor.text_body();
 
-        let selection = match editor_style.text_body.selection {
-            Some(some) => some,
-            None => return,
-        };
-
-        let value = editor_style.text_body.selection_string(selection);
-        *self.state.lock().clipboard.borrow_mut() = value;
-    }
-
-    fn cut(self: &Arc<Self>) {
-        let mut value_op = None;
-        let cb_text_area = self.clone();
-
-        self.editor.style_modify_then(
-            |style| {
-                let selection = match style.text_body.selection {
-                    Some(some) => some,
-                    None => return TextCursor::None,
-                };
-
-                let (cursor, value) = style.text_body.selection_take_string(selection);
-
-                if cursor == TextCursor::None || value.is_empty() {
-                    return TextCursor::None;
-                }
-
-                style.text_body.selection = None;
-                style.text_body.cursor = cursor;
-                value_op = Some(value);
-                cursor
-            },
-            move |_editor, bpu, cursor| {
-                cb_text_area.check_cursor_in_view(bpu, cursor);
-            },
-        );
-
-        if let Some(value) = value_op {
-            *self.state.lock().clipboard.borrow_mut() = value;
-            self.reset_cursor_blink();
+        if let Some(selection) = text_body.selection() {
+            *self.state.lock().clipboard.borrow_mut() = text_body.selection_string(selection);
         }
     }
 
+    fn cut(self: &Arc<Self>) {
+        let text_body = self.editor.text_body();
+
+        if let Some(selection) = text_body.selection() {
+            let (cursor, selection_value) = text_body.selection_take_string(selection);
+            text_body.clear_selection();
+            text_body.set_cursor(cursor);
+            *self.state.lock().clipboard.borrow_mut() = selection_value;
+
+            if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+                let text_area = self.clone();
+
+                text_body.bin_on_update(move |_, editor_bpu| {
+                    text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                });
+            }
+        }
+
+        self.reset_cursor_blink();
+    }
+
     fn paste(self: &Arc<Self>) {
-        let value = self.state.lock().clipboard.borrow().clone();
-        let cb_text_area = self.clone();
+        let text_body = self.editor.text_body();
 
-        self.editor.style_modify_then(
-            |style| {
-                let cursor = match style.text_body.selection.take() {
-                    Some(selection) => style.text_body.selection_delete(selection),
-                    None => style.text_body.cursor,
-                };
+        if let Some(selection) = text_body.selection() {
+            text_body.clear_selection();
+            text_body.set_cursor(text_body.selection_delete(selection));
+        }
 
-                if cursor == TextCursor::None {
-                    return TextCursor::None;
-                }
+        text_body.set_cursor(text_body.cursor_insert_str(
+            text_body.cursor(),
+            self.state.lock().clipboard.borrow().clone(),
+        ));
 
-                style.text_body.cursor = style.text_body.cursor_insert_string(cursor, value);
-                style.text_body.cursor
-            },
-            move |_editor, bpu, cursor| {
-                cb_text_area.check_cursor_in_view(bpu, cursor);
-            },
-        );
+        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+            let text_area = self.clone();
+
+            text_body.bin_on_update(move |_, editor_bpu| {
+                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+            });
+        }
+
+        self.reset_cursor_blink();
     }
 
     fn select_all(self: &Arc<Self>) {
-        // TODO:
+        let text_body = self.editor.text_body();
+
+        if let Some(selection) = text_body.select_all() {
+            text_body.set_selection(selection);
+        }
     }
 
-    fn check_cursor_in_view(&self, editor_bpu: &BinPostUpdate, cursor: TextCursor) {
-        let mut cursor_bounds = match self.editor.get_text_cursor_bounds(cursor) {
-            Some(some) => some,
-            None => return,
-        };
-
+    fn check_cursor_in_view2(&self, editor_bpu: &BinPostUpdate, mut cursor_bounds: [f32; 4]) {
         let editor_size = [
             editor_bpu.optimal_inner_bounds[1] - editor_bpu.optimal_inner_bounds[0],
             editor_bpu.optimal_inner_bounds[3] - editor_bpu.optimal_inner_bounds[2],
