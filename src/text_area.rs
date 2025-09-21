@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 use basalt::input::{MouseButton, Qwerty};
 use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{
-    Bin, BinPostUpdate, BinStyle, Position, TextBody, TextCursor, TextSelection,
+    Bin, BinPostUpdate, BinStyle, Position, TextAttrs, TextBody, TextCursor, TextSelection,
+    TextSpan,
 };
 use basalt::interval::IntvlHookID;
 use parking_lot::ReentrantMutex;
@@ -51,9 +52,23 @@ where
         }
     }
 
-    /// Set inital text body.
-    pub fn text_body(mut self, text_body: TextBody) -> Self {
-        self.text_body = text_body;
+    /// Set the inital text.
+    pub fn with_text<T>(mut self, text: T) -> Self
+    where
+        T: Into<String>,
+    {
+        if self.text_body.spans.is_empty() {
+            self.text_body.spans.push(TextSpan::from(text.into()));
+        } else {
+            self.text_body.spans[0] = TextSpan::from(text.into());
+        }
+
+        self
+    }
+
+    /// Set the [`TextAttrs`] used.
+    pub fn with_attrs(mut self, attrs: TextAttrs) -> Self {
+        self.text_body.base_attrs = attrs;
         self
     }
 
@@ -321,8 +336,8 @@ where
                 });
             } else {
                 text_body.set_selection(TextSelection {
-                    start: select_from,
-                    end: select_to,
+                    start: select_to,
+                    end: select_from,
                 });
             }
 
@@ -496,57 +511,38 @@ where
                 return Default::default();
             }
 
-            let cb2_text_area = cb_text_area.clone();
+            let text_body = cb_text_area.editor.text_body();
+            let mut selection_deleted = false;
 
-            cb_text_area.editor.style_modify_then(
-                |style| {
-                    if let Some(selection) = style.text_body.selection.take() {
-                        style.text_body.cursor = style.text_body.selection_delete(selection);
+            if let Some(selection) = text_body.selection() {
+                text_body.clear_selection();
+                text_body.set_cursor(text_body.selection_delete(selection));
+                selection_deleted = true;
+            }
 
-                        if c.is_backspace() {
-                            cb_text_area.reset_cursor_blink();
-                            return style.text_body.cursor;
-                        }
-                    }
+            if c.is_backspace() {
+                if !selection_deleted {
+                    text_body.set_cursor(text_body.cursor_delete(text_body.cursor()));
+                }
+            } else {
+                if c.0 == '\r' {
+                    c.0 = '\n';
+                }
 
-                    if c.is_backspace() {
-                        if matches!(style.text_body.cursor, TextCursor::None | TextCursor::Empty) {
-                            return style.text_body.cursor;
-                        }
+                text_body.set_cursor(text_body.cursor_insert(text_body.cursor(), *c));
+            }
 
-                        style.text_body.cursor =
-                            style.text_body.cursor_delete(style.text_body.cursor);
+            if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+                let cb_text_area2 = cb_text_area.clone();
 
-                        cb_text_area.reset_cursor_blink();
-                    } else {
-                        if c.0 == '\r' {
-                            c.0 = '\n';
-                        }
+                text_body.bin_on_update(move |_, editor_bpu| {
+                    cb_text_area2.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                });
+            }
 
-                        style.text_body.cursor =
-                            style.text_body.cursor_insert(style.text_body.cursor, *c);
-
-                        if style.text_body.cursor != TextCursor::None {
-                            cb_text_area.reset_cursor_blink();
-                        }
-                    }
-
-                    style.text_body.cursor
-                },
-                move |_editor, bpu, cursor| {
-                    cb2_text_area.check_cursor_in_view(bpu, cursor);
-                },
-            );
-
+            cb_text_area.reset_cursor_blink();
             Default::default()
         });
-
-        /*text_area.editor.on_update(|container, _| {
-            let cursor = container.style_inspect(|style| style.text_body.cursor);
-            let bounds = container.get_text_cursor_bounds(cursor);
-            println!("Cursor:        {:?}", cursor);
-            println!("Cursor Bounds: {:?}", bounds);
-        });*/
 
         text_area.style_update(Some(self.text_body));
         text_area
@@ -680,11 +676,7 @@ impl TextArea {
         if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
             let text_area = self.clone();
 
-            text_body.bin_on_update(move |editor, editor_bpu| {
-                let body = editor.text_body();
-                let bounds2 = body.cursor_bounds(body.cursor());
-
-                println!("{:?} == {:?}", cursor_bounds, bounds2);
+            text_body.bin_on_update(move |_, editor_bpu| {
                 text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
             });
         }
@@ -768,143 +760,67 @@ impl TextArea {
     }
 
     fn copy(self: &Arc<Self>) {
-        let editor_style = self.editor.style();
+        let text_body = self.editor.text_body();
 
-        let selection = match editor_style.text_body.selection {
-            Some(some) => some,
-            None => return,
-        };
-
-        let value = editor_style.text_body.selection_string(selection);
-        *self.state.lock().clipboard.borrow_mut() = value;
+        if let Some(selection) = text_body.selection() {
+            *self.state.lock().clipboard.borrow_mut() = text_body.selection_string(selection);
+        }
     }
 
     fn cut(self: &Arc<Self>) {
-        let mut value_op = None;
-        let cb_text_area = self.clone();
+        let text_body = self.editor.text_body();
 
-        self.editor.style_modify_then(
-            |style| {
-                let selection = match style.text_body.selection {
-                    Some(some) => some,
-                    None => return TextCursor::None,
-                };
+        if let Some(selection) = text_body.selection() {
+            let (cursor, selection_value) = text_body.selection_take_string(selection);
+            text_body.clear_selection();
+            text_body.set_cursor(cursor);
+            *self.state.lock().clipboard.borrow_mut() = selection_value;
 
-                let (cursor, value) = style.text_body.selection_take_string(selection);
+            if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+                let text_area = self.clone();
 
-                if cursor == TextCursor::None || value.is_empty() {
-                    return TextCursor::None;
-                }
-
-                style.text_body.selection = None;
-                style.text_body.cursor = cursor;
-                value_op = Some(value);
-                cursor
-            },
-            move |_editor, bpu, cursor| {
-                cb_text_area.check_cursor_in_view(bpu, cursor);
-            },
-        );
-
-        if let Some(value) = value_op {
-            *self.state.lock().clipboard.borrow_mut() = value;
-            self.reset_cursor_blink();
+                text_body.bin_on_update(move |_, editor_bpu| {
+                    text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                });
+            }
         }
+
+        self.reset_cursor_blink();
     }
 
     fn paste(self: &Arc<Self>) {
-        let value = self.state.lock().clipboard.borrow().clone();
-        let cb_text_area = self.clone();
+        let text_body = self.editor.text_body();
 
-        self.editor.style_modify_then(
-            |style| {
-                let cursor = match style.text_body.selection.take() {
-                    Some(selection) => style.text_body.selection_delete(selection),
-                    None => style.text_body.cursor,
-                };
+        if let Some(selection) = text_body.selection() {
+            text_body.clear_selection();
+            text_body.set_cursor(text_body.selection_delete(selection));
+        }
 
-                if cursor == TextCursor::None {
-                    return TextCursor::None;
-                }
+        text_body.set_cursor(text_body.cursor_insert_str(
+            text_body.cursor(),
+            self.state.lock().clipboard.borrow().clone(),
+        ));
 
-                style.text_body.cursor = style.text_body.cursor_insert_string(cursor, value);
-                style.text_body.cursor
-            },
-            move |_editor, bpu, cursor| {
-                cb_text_area.check_cursor_in_view(bpu, cursor);
-            },
-        );
+        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+            let text_area = self.clone();
+
+            text_body.bin_on_update(move |_, editor_bpu| {
+                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+            });
+        }
+
+        self.reset_cursor_blink();
     }
 
     fn select_all(self: &Arc<Self>) {
-        // TODO:
+        let text_body = self.editor.text_body();
+
+        if let Some(selection) = text_body.select_all() {
+            text_body.set_selection(selection);
+        }
     }
 
     fn check_cursor_in_view2(&self, editor_bpu: &BinPostUpdate, mut cursor_bounds: [f32; 4]) {
-        let editor_size = [
-            editor_bpu.optimal_inner_bounds[1] - editor_bpu.optimal_inner_bounds[0],
-            editor_bpu.optimal_inner_bounds[3] - editor_bpu.optimal_inner_bounds[2],
-        ];
-
-        let text_offset = [
-            editor_bpu.optimal_inner_bounds[0] + editor_bpu.content_offset[0],
-            editor_bpu.optimal_inner_bounds[2] + editor_bpu.content_offset[1],
-        ];
-
-        cursor_bounds[0] -= text_offset[0];
-        cursor_bounds[1] -= text_offset[0];
-        cursor_bounds[2] -= text_offset[1];
-        cursor_bounds[3] -= text_offset[1];
-
-        let target_scroll = [
-            self.h_scroll_b.target_scroll(),
-            self.v_scroll_b.target_scroll(),
-        ];
-
-        let editor_overflow = [
-            self.h_scroll_b.target_overflow(),
-            self.v_scroll_b.target_overflow(),
-        ];
-
-        let scroll_to_x_op = if cursor_bounds[0] - target_scroll[0] - self.theme.spacing < 0.0 {
-            Some(cursor_bounds[0] - self.theme.spacing)
-        } else if cursor_bounds[1] - target_scroll[0] + self.theme.spacing > editor_size[0] {
-            Some(cursor_bounds[1] + self.theme.spacing - editor_size[0])
-        } else {
-            None
-        };
-
-        let scroll_to_y_op = if cursor_bounds[2] - target_scroll[1] - self.theme.spacing < 0.0 {
-            Some(cursor_bounds[2] - self.theme.spacing)
-        } else if cursor_bounds[3] - target_scroll[1] + self.theme.spacing > editor_size[1] {
-            Some(cursor_bounds[3] + self.theme.spacing - editor_size[1])
-        } else {
-            None
-        };
-
-        if let Some(mut scroll_to_x) = scroll_to_x_op {
-            scroll_to_x = scroll_to_x.clamp(0.0, editor_overflow[0]);
-
-            if !ulps_eq(scroll_to_x, target_scroll[0], 8) {
-                self.h_scroll_b.scroll_to(scroll_to_x);
-            }
-        }
-
-        if let Some(mut scroll_to_y) = scroll_to_y_op {
-            scroll_to_y = scroll_to_y.clamp(0.0, editor_overflow[1]);
-
-            if !ulps_eq(scroll_to_y, target_scroll[1], 8) {
-                self.v_scroll_b.scroll_to(scroll_to_y);
-            }
-        }
-    }
-
-    fn check_cursor_in_view(&self, editor_bpu: &BinPostUpdate, cursor: TextCursor) {
-        let mut cursor_bounds = match self.editor.get_text_cursor_bounds(cursor) {
-            Some(some) => some,
-            None => return,
-        };
-
         let editor_size = [
             editor_bpu.optimal_inner_bounds[1] - editor_bpu.optimal_inner_bounds[0],
             editor_bpu.optimal_inner_bounds[3] - editor_bpu.optimal_inner_bounds[2],
