@@ -648,12 +648,97 @@ impl TextArea {
                     // Selection Shrink Word
                 } else {
                     // Selection Shrink Character
+                    if let Some(mut selection) = text_body.selection() {
+                        selection.end = match text_body.cursor_prev(selection.end.into()) {
+                            TextCursor::Empty | TextCursor::None => return,
+                            TextCursor::Position(cursor) => cursor,
+                        };
+
+                        if selection.end <= selection.start {
+                            text_body.clear_selection();
+                            text_body.set_cursor(selection.start.into());
+                        } else {
+                            text_body.set_selection(selection);
+                        }
+                    }
                 }
             } else {
                 if modifiers.ctrl() {
                     // Selection Expand Word
+                    match text_body.selection() {
+                        Some(mut selection) => {
+                            let mut word_start =
+                                match text_body.cursor_word_start(selection.start.into()) {
+                                    TextCursor::Empty | TextCursor::None => return,
+                                    TextCursor::Position(cursor) => cursor,
+                                };
+
+                            if selection.start == word_start {
+                                word_start = match text_body.cursor_word_start(
+                                    text_body.cursor_prev(selection.start.into()),
+                                ) {
+                                    TextCursor::Empty | TextCursor::None => return,
+                                    TextCursor::Position(cursor) => cursor,
+                                };
+                            }
+
+                            selection.start = word_start;
+                            text_body.set_selection(selection);
+                        },
+                        None => {
+                            let end = match text_body.cursor() {
+                                TextCursor::Empty | TextCursor::None => return,
+                                TextCursor::Position(cursor) => cursor,
+                            };
+
+                            let mut start = match text_body.cursor_word_start(end.into()) {
+                                TextCursor::Empty | TextCursor::None => return,
+                                TextCursor::Position(cursor) => cursor,
+                            };
+
+                            if start == end {
+                                start = match text_body
+                                    .cursor_word_start(text_body.cursor_prev(end.into()))
+                                {
+                                    TextCursor::Empty | TextCursor::None => return,
+                                    TextCursor::Position(cursor) => cursor,
+                                };
+                            }
+
+                            text_body.set_selection(TextSelection {
+                                start,
+                                end,
+                            });
+                        },
+                    }
                 } else {
                     // Selection Expand Character
+                    match text_body.selection() {
+                        Some(mut selection) => {
+                            selection.start = match text_body.cursor_prev(selection.start.into()) {
+                                TextCursor::Empty | TextCursor::None => return,
+                                TextCursor::Position(cursor) => cursor,
+                            };
+
+                            text_body.set_selection(selection);
+                        },
+                        None => {
+                            let end = match text_body.cursor() {
+                                TextCursor::Empty | TextCursor::None => return,
+                                TextCursor::Position(cursor) => cursor,
+                            };
+
+                            let start = match text_body.cursor_prev(end.into()) {
+                                TextCursor::Empty | TextCursor::None => return,
+                                TextCursor::Position(cursor) => cursor,
+                            };
+
+                            text_body.set_selection(TextSelection {
+                                start,
+                                end,
+                            });
+                        },
+                    }
                 }
             }
 
@@ -701,12 +786,97 @@ impl TextArea {
                     // Selection Shrink Word
                 } else {
                     // Selection Shrink Character
+                    if let Some(mut selection) = text_body.selection() {
+                        selection.start = match text_body.cursor_next(selection.start.into()) {
+                            TextCursor::Empty | TextCursor::None => return,
+                            TextCursor::Position(cursor) => cursor,
+                        };
+
+                        if selection.start >= selection.end {
+                            text_body.clear_selection();
+                            text_body.set_cursor(selection.end.into());
+                        } else {
+                            text_body.set_selection(selection);
+                        }
+                    }
                 }
             } else {
                 if modifiers.ctrl() {
                     // Selection Expand Word
+                    match text_body.selection() {
+                        Some(mut selection) => {
+                            let mut word_end = match text_body.cursor_word_end(selection.end.into())
+                            {
+                                TextCursor::Empty | TextCursor::None => return,
+                                TextCursor::Position(cursor) => cursor,
+                            };
+
+                            if selection.end == word_end {
+                                word_end = match text_body
+                                    .cursor_word_end(text_body.cursor_next(selection.end.into()))
+                                {
+                                    TextCursor::Empty | TextCursor::None => return,
+                                    TextCursor::Position(cursor) => cursor,
+                                };
+                            }
+
+                            selection.end = word_end;
+                            text_body.set_selection(selection);
+                        },
+                        None => {
+                            let start = match text_body.cursor() {
+                                TextCursor::Empty | TextCursor::None => return,
+                                TextCursor::Position(cursor) => cursor,
+                            };
+
+                            let mut end = match text_body.cursor_word_end(start.into()) {
+                                TextCursor::Empty | TextCursor::None => return,
+                                TextCursor::Position(cursor) => cursor,
+                            };
+
+                            if start == end {
+                                end = match text_body
+                                    .cursor_word_end(text_body.cursor_next(start.into()))
+                                {
+                                    TextCursor::Empty | TextCursor::None => return,
+                                    TextCursor::Position(cursor) => cursor,
+                                };
+                            }
+
+                            text_body.set_selection(TextSelection {
+                                start,
+                                end,
+                            });
+                        },
+                    }
                 } else {
                     // Selection Expand Character
+                    match text_body.selection() {
+                        Some(mut selection) => {
+                            selection.end = match text_body.cursor_next(selection.end.into()) {
+                                TextCursor::Empty | TextCursor::None => return,
+                                TextCursor::Position(cursor) => cursor,
+                            };
+
+                            text_body.set_selection(selection);
+                        },
+                        None => {
+                            let start = match text_body.cursor() {
+                                TextCursor::Empty | TextCursor::None => return,
+                                TextCursor::Position(cursor) => cursor,
+                            };
+
+                            let end = match text_body.cursor_next(start.into()) {
+                                TextCursor::Empty | TextCursor::None => return,
+                                TextCursor::Position(cursor) => cursor,
+                            };
+
+                            text_body.set_selection(TextSelection {
+                                start,
+                                end,
+                            });
+                        },
+                    }
                 }
             }
 
