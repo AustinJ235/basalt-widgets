@@ -1,9 +1,10 @@
 use std::cell::RefCell;
+use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign};
 use std::sync::Arc;
-use std::sync::atomic::{self, AtomicBool};
+use std::sync::atomic::{self, AtomicBool, AtomicU8};
 use std::time::{Duration, Instant};
 
-use basalt::input::{MouseButton, Qwerty};
+use basalt::input::{MouseButton, Qwerty, WindowState};
 use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{
     Bin, BinPostUpdate, BinStyle, Position, TextAttrs, TextBody, TextCursor, TextSelection,
@@ -177,6 +178,8 @@ where
         text_area
             .editor
             .on_press(MouseButton::Left, move |_, window, _| {
+                let modifiers = Modifiers::from(window);
+
                 match last_press_op {
                     Some(last_press) => {
                         if last_press.elapsed() <= Duration::from_millis(300) {
@@ -195,10 +198,6 @@ where
                 }
 
                 last_press_op = Some(Instant::now());
-
-                let extends_selection =
-                    window.is_key_pressed(Qwerty::LShift) || window.is_key_pressed(Qwerty::RShift);
-
                 let text_body = cb_text_area.editor.text_body();
                 let cursor = text_body.get_cursor(window.cursor_pos());
 
@@ -208,7 +207,7 @@ where
 
                 match consecutive_presses {
                     1 => {
-                        if extends_selection {
+                        if modifiers.shift() {
                             match text_body.selection() {
                                 Some(existing_selection) => {
                                     text_body.set_selection(existing_selection.extend(cursor));
@@ -229,7 +228,7 @@ where
                             _ => unreachable!(),
                         } {
                             Some(selection) => {
-                                if extends_selection {
+                                if modifiers.shift() {
                                     match text_body.selection() {
                                         Some(existing_selection) => {
                                             text_body.set_selection(
@@ -261,7 +260,7 @@ where
                         let cb_text_area2 = cb_text_area.clone();
 
                         text_body.bin_on_update(move |_, editor_bpu| {
-                            cb_text_area2.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                            cb_text_area2.check_cursor_in_view(editor_bpu, cursor_bounds);
                         });
                     }
                 }
@@ -344,16 +343,46 @@ where
             Default::default()
         });
 
+        let modifiers = Arc::new(AtomicU8::new(0));
+
+        for (key, mask) in [
+            (Qwerty::LShift, Modifiers::LEFT_SHIFT),
+            (Qwerty::RShift, Modifiers::RIGHT_SHIFT),
+            (Qwerty::LCtrl, Modifiers::LEFT_CTRL),
+            (Qwerty::RCtrl, Modifiers::RIGHT_CTRL),
+            (Qwerty::LAlt, Modifiers::LEFT_ALT),
+            (Qwerty::RAlt, Modifiers::RIGHT_ALT),
+        ] {
+            let cb_modifiers = modifiers.clone();
+
+            text_area.editor.on_press(key, move |_, _, _| {
+                let mut modifiers = Modifiers::from(&cb_modifiers);
+                modifiers |= mask;
+                cb_modifiers.store(modifiers.0, atomic::Ordering::SeqCst);
+                Default::default()
+            });
+
+            let cb_modifiers = modifiers.clone();
+
+            text_area.editor.on_release(key, move |_, _, _| {
+                let mut modifiers = Modifiers::from(&cb_modifiers);
+                modifiers &= Modifiers(255) ^ mask;
+                cb_modifiers.store(modifiers.0, atomic::Ordering::SeqCst);
+                Default::default()
+            });
+        }
+
         let cb_text_area = text_area.clone();
 
         text_area
             .editor
-            .on_press(Qwerty::ArrowLeft, move |_, _, _| {
-                cb_text_area.move_cursor_left();
+            .on_press(Qwerty::ArrowLeft, move |_, window_state, _| {
+                cb_text_area.move_cursor_left(window_state);
                 Default::default()
             });
 
         let cb_text_area = text_area.clone();
+        let cb_modifiers = modifiers.clone();
 
         window
             .basalt_ref()
@@ -365,7 +394,7 @@ where
             .delay(Some(Duration::from_millis(600)))
             .interval(Duration::from_millis(40))
             .call(move |_, _, _| {
-                cb_text_area.move_cursor_left();
+                cb_text_area.move_cursor_left(&cb_modifiers);
                 Default::default()
             })
             .finish()
@@ -375,12 +404,13 @@ where
 
         text_area
             .editor
-            .on_press(Qwerty::ArrowRight, move |_, _, _| {
-                cb_text_area.move_cursor_right();
+            .on_press(Qwerty::ArrowRight, move |_, window_state, _| {
+                cb_text_area.move_cursor_right(window_state);
                 Default::default()
             });
 
         let cb_text_area = text_area.clone();
+        let cb_modifiers = modifiers.clone();
 
         window
             .basalt_ref()
@@ -392,7 +422,7 @@ where
             .delay(Some(Duration::from_millis(600)))
             .interval(Duration::from_millis(40))
             .call(move |_, _, _| {
-                cb_text_area.move_cursor_right();
+                cb_text_area.move_cursor_right(&cb_modifiers);
                 Default::default()
             })
             .finish()
@@ -400,12 +430,15 @@ where
 
         let cb_text_area = text_area.clone();
 
-        text_area.editor.on_press(Qwerty::ArrowUp, move |_, _, _| {
-            cb_text_area.move_cursor_up();
-            Default::default()
-        });
+        text_area
+            .editor
+            .on_press(Qwerty::ArrowUp, move |_, window_state, _| {
+                cb_text_area.move_cursor_up(window_state);
+                Default::default()
+            });
 
         let cb_text_area = text_area.clone();
+        let cb_modifiers = modifiers.clone();
 
         window
             .basalt_ref()
@@ -417,7 +450,7 @@ where
             .delay(Some(Duration::from_millis(600)))
             .interval(Duration::from_millis(40))
             .call(move |_, _, _| {
-                cb_text_area.move_cursor_up();
+                cb_text_area.move_cursor_up(&cb_modifiers);
                 Default::default()
             })
             .finish()
@@ -427,12 +460,13 @@ where
 
         text_area
             .editor
-            .on_press(Qwerty::ArrowDown, move |_, _, _| {
-                cb_text_area.move_cursor_down();
+            .on_press(Qwerty::ArrowDown, move |_, window_state, _| {
+                cb_text_area.move_cursor_down(window_state);
                 Default::default()
             });
 
         let cb_text_area = text_area.clone();
+        let cb_modifiers = modifiers;
 
         window
             .basalt_ref()
@@ -444,7 +478,7 @@ where
             .delay(Some(Duration::from_millis(600)))
             .interval(Duration::from_millis(40))
             .call(move |_, _, _| {
-                cb_text_area.move_cursor_down();
+                cb_text_area.move_cursor_down(&cb_modifiers);
                 Default::default()
             })
             .finish()
@@ -503,11 +537,9 @@ where
         let cb_text_area = text_area.clone();
 
         text_area.editor.on_character(move |_, window, mut c| {
-            if window.is_key_pressed(Qwerty::LCtrl)
-                || window.is_key_pressed(Qwerty::LAlt)
-                || window.is_key_pressed(Qwerty::RCtrl)
-                || window.is_key_pressed(Qwerty::RAlt)
-            {
+            let modifiers = Modifiers::from(window);
+
+            if modifiers.ctrl() || modifiers.alt() {
                 return Default::default();
             }
 
@@ -536,7 +568,7 @@ where
                 let cb_text_area2 = cb_text_area.clone();
 
                 text_body.bin_on_update(move |_, editor_bpu| {
-                    cb_text_area2.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                    cb_text_area2.check_cursor_in_view(editor_bpu, cursor_bounds);
                 });
             }
 
@@ -603,7 +635,10 @@ impl TextArea {
             .pause(self.state.lock().c_blink_intvl_hid.borrow().unwrap());
     }
 
-    fn move_cursor_left(self: &Arc<Self>) {
+    fn move_cursor_left<M>(self: &Arc<Self>, _modifiers: M)
+    where
+        M: Into<Modifiers>,
+    {
         let text_body = self.editor.text_body();
 
         match text_body.selection() {
@@ -624,20 +659,23 @@ impl TextArea {
             let text_area = self.clone();
 
             text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
             });
         }
 
         self.reset_cursor_blink();
     }
 
-    fn move_cursor_right(self: &Arc<Self>) {
+    fn move_cursor_right<M>(self: &Arc<Self>, _modifiers: M)
+    where
+        M: Into<Modifiers>,
+    {
         let text_body = self.editor.text_body();
 
         match text_body.selection() {
             Some(selection) => {
                 text_body.clear_selection();
-                text_body.set_cursor(selection.start.into());
+                text_body.set_cursor(selection.end.into());
             },
             None => {
                 let cursor_next = text_body.cursor_next(text_body.cursor());
@@ -652,14 +690,17 @@ impl TextArea {
             let text_area = self.clone();
 
             text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
             });
         }
 
         self.reset_cursor_blink();
     }
 
-    fn move_cursor_up(self: &Arc<Self>) {
+    fn move_cursor_up<M>(self: &Arc<Self>, _modifiers: M)
+    where
+        M: Into<Modifiers>,
+    {
         let text_body = self.editor.text_body();
 
         if let Some(selection) = text_body.selection() {
@@ -677,14 +718,17 @@ impl TextArea {
             let text_area = self.clone();
 
             text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
             });
         }
 
         self.reset_cursor_blink();
     }
 
-    fn move_cursor_down(self: &Arc<Self>) {
+    fn move_cursor_down<M>(self: &Arc<Self>, _modifiers: M)
+    where
+        M: Into<Modifiers>,
+    {
         let text_body = self.editor.text_body();
 
         if let Some(selection) = text_body.selection() {
@@ -702,7 +746,7 @@ impl TextArea {
             let text_area = self.clone();
 
             text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
             });
         }
 
@@ -727,7 +771,7 @@ impl TextArea {
             let text_area = self.clone();
 
             text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
             });
         }
 
@@ -752,7 +796,7 @@ impl TextArea {
             let text_area = self.clone();
 
             text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
             });
         }
 
@@ -780,7 +824,7 @@ impl TextArea {
                 let text_area = self.clone();
 
                 text_body.bin_on_update(move |_, editor_bpu| {
-                    text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                    text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
                 });
             }
         }
@@ -805,7 +849,7 @@ impl TextArea {
             let text_area = self.clone();
 
             text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view2(editor_bpu, cursor_bounds);
+                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
             });
         }
 
@@ -820,7 +864,7 @@ impl TextArea {
         }
     }
 
-    fn check_cursor_in_view2(&self, editor_bpu: &BinPostUpdate, mut cursor_bounds: [f32; 4]) {
+    fn check_cursor_in_view(&self, editor_bpu: &BinPostUpdate, mut cursor_bounds: [f32; 4]) {
         let editor_size = [
             editor_bpu.optimal_inner_bounds[1] - editor_bpu.optimal_inner_bounds[0],
             editor_bpu.optimal_inner_bounds[3] - editor_bpu.optimal_inner_bounds[2],
@@ -926,5 +970,109 @@ impl TextArea {
             (&self.container, container_style),
             (&self.editor, editor_style),
         ]);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Modifiers(u8);
+
+impl Modifiers {
+    pub const LEFT_ALT: Self = Self(0b00001000);
+    pub const LEFT_CTRL: Self = Self(0b00100000);
+    pub const LEFT_SHIFT: Self = Self(0b10000000);
+    pub const RIGHT_ALT: Self = Self(0b00000100);
+    pub const RIGHT_CTRL: Self = Self(0b00010000);
+    pub const RIGHT_SHIFT: Self = Self(0b01000000);
+
+    pub fn shift(self) -> bool {
+        self & Self::LEFT_SHIFT == Self::LEFT_SHIFT || self & Self::RIGHT_SHIFT == Self::RIGHT_SHIFT
+    }
+
+    pub fn ctrl(self) -> bool {
+        self & Self::LEFT_CTRL == Self::LEFT_CTRL || self & Self::RIGHT_CTRL == Self::RIGHT_CTRL
+    }
+
+    pub fn alt(self) -> bool {
+        self & Self::LEFT_ALT == Self::LEFT_ALT || self & Self::RIGHT_ALT == Self::RIGHT_ALT
+    }
+}
+
+impl From<&Arc<AtomicU8>> for Modifiers {
+    fn from(atomic: &Arc<AtomicU8>) -> Self {
+        Self(atomic.load(atomic::Ordering::SeqCst))
+    }
+}
+
+impl From<&WindowState> for Modifiers {
+    fn from(window_state: &WindowState) -> Self {
+        let mut modifiers = Self(0);
+
+        if window_state.is_key_pressed(Qwerty::LShift) {
+            modifiers |= Self::LEFT_SHIFT;
+        }
+
+        if window_state.is_key_pressed(Qwerty::RShift) {
+            modifiers |= Self::RIGHT_SHIFT;
+        }
+
+        if window_state.is_key_pressed(Qwerty::LCtrl) {
+            modifiers |= Self::LEFT_CTRL;
+        }
+
+        if window_state.is_key_pressed(Qwerty::RCtrl) {
+            modifiers |= Self::RIGHT_CTRL;
+        }
+
+        if window_state.is_key_pressed(Qwerty::LAlt) {
+            modifiers |= Self::LEFT_ALT;
+        }
+
+        if window_state.is_key_pressed(Qwerty::RAlt) {
+            modifiers |= Self::RIGHT_ALT;
+        }
+
+        modifiers
+    }
+}
+
+impl BitAnd for Modifiers {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for Modifiers {
+    fn bitand_assign(&mut self, rhs: Self) {
+        *self = Self(self.0 & rhs.0);
+    }
+}
+
+impl BitOr for Modifiers {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for Modifiers {
+    fn bitor_assign(&mut self, rhs: Self) {
+        *self = Self(self.0 | rhs.0);
+    }
+}
+
+impl BitXor for Modifiers {
+    type Output = Self;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        Self(self.0 ^ rhs.0)
+    }
+}
+
+impl BitXorAssign for Modifiers {
+    fn bitxor_assign(&mut self, rhs: Self) {
+        *self = Self(self.0 ^ rhs.0);
     }
 }
