@@ -635,11 +635,33 @@ impl TextArea {
             .pause(self.state.lock().c_blink_intvl_hid.borrow().unwrap());
     }
 
-    fn move_cursor_left<M>(self: &Arc<Self>, _modifiers: M)
+    fn move_cursor_left<M>(self: &Arc<Self>, modifiers: M)
     where
         M: Into<Modifiers>,
     {
+        let modifiers = modifiers.into();
         let text_body = self.editor.text_body();
+
+        if modifiers.shift() {
+            if modifiers.alt() {
+                if modifiers.ctrl() {
+                    // Selection Shrink Word
+                } else {
+                    // Selection Shrink Character
+                }
+            } else {
+                if modifiers.ctrl() {
+                    // Selection Expand Word
+                } else {
+                    // Selection Expand Character
+                }
+            }
+
+            return;
+        } else if modifiers.ctrl() {
+            // Scroll Left
+            return;
+        }
 
         match text_body.selection() {
             Some(selection) => {
@@ -666,11 +688,33 @@ impl TextArea {
         self.reset_cursor_blink();
     }
 
-    fn move_cursor_right<M>(self: &Arc<Self>, _modifiers: M)
+    fn move_cursor_right<M>(self: &Arc<Self>, modifiers: M)
     where
         M: Into<Modifiers>,
     {
+        let modifiers = modifiers.into();
         let text_body = self.editor.text_body();
+
+        if modifiers.shift() {
+            if modifiers.alt() {
+                if modifiers.ctrl() {
+                    // Selection Shrink Word
+                } else {
+                    // Selection Shrink Character
+                }
+            } else {
+                if modifiers.ctrl() {
+                    // Selection Expand Word
+                } else {
+                    // Selection Expand Character
+                }
+            }
+
+            return;
+        } else if modifiers.ctrl() {
+            // Scroll Right
+            return;
+        }
 
         match text_body.selection() {
             Some(selection) => {
@@ -697,11 +741,33 @@ impl TextArea {
         self.reset_cursor_blink();
     }
 
-    fn move_cursor_up<M>(self: &Arc<Self>, _modifiers: M)
+    fn move_cursor_up<M>(self: &Arc<Self>, modifiers: M)
     where
         M: Into<Modifiers>,
     {
+        let modifiers = modifiers.into();
         let text_body = self.editor.text_body();
+
+        if modifiers.shift() {
+            if modifiers.alt() {
+                if modifiers.ctrl() {
+                    // Selection Shrink Line
+                } else {
+                    // Selection Shrink Character
+                }
+            } else {
+                if modifiers.ctrl() {
+                    // Selection Expand Line
+                } else {
+                    // Selection Expand Character
+                }
+            }
+
+            return;
+        } else if modifiers.ctrl() {
+            // Scroll Up
+            return;
+        }
 
         if let Some(selection) = text_body.selection() {
             text_body.clear_selection();
@@ -725,11 +791,33 @@ impl TextArea {
         self.reset_cursor_blink();
     }
 
-    fn move_cursor_down<M>(self: &Arc<Self>, _modifiers: M)
+    fn move_cursor_down<M>(self: &Arc<Self>, modifiers: M)
     where
         M: Into<Modifiers>,
     {
+        let modifiers = modifiers.into();
         let text_body = self.editor.text_body();
+
+        if modifiers.shift() {
+            if modifiers.alt() {
+                if modifiers.ctrl() {
+                    // Selection Shrink Line
+                } else {
+                    // Selection Shrink Character
+                }
+            } else {
+                if modifiers.ctrl() {
+                    // Selection Expand Line
+                } else {
+                    // Selection Expand Character
+                }
+            }
+
+            return;
+        } else if modifiers.ctrl() {
+            // Scroll Down
+            return;
+        }
 
         if let Some(selection) = text_body.selection() {
             text_body.clear_selection();
