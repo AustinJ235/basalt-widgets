@@ -810,7 +810,71 @@ impl TextArea {
             self.reset_cursor_blink();
             return;
         } else if modifiers.ctrl() {
-            // Scroll
+            if matches!(direction, Direction::Left | Direction::Right) {
+                let mut cursor = match text_body.selection() {
+                    Some(selection) => {
+                        if direction == Direction::Left {
+                            selection.start
+                        } else {
+                            selection.end
+                        }
+                    },
+                    None => {
+                        match text_body.cursor() {
+                            TextCursor::None | TextCursor::Empty => return,
+                            TextCursor::Position(cursor) => cursor,
+                        }
+                    },
+                };
+
+                cursor = if direction == Direction::Left {
+                    let mut word_start = match text_body.cursor_word_start(cursor.into()) {
+                        TextCursor::None | TextCursor::Empty => return,
+                        TextCursor::Position(cursor) => cursor,
+                    };
+
+                    if word_start == cursor {
+                        word_start = match text_body
+                            .cursor_word_start(text_body.cursor_prev(cursor.into()))
+                        {
+                            TextCursor::None | TextCursor::Empty => return,
+                            TextCursor::Position(cursor) => cursor,
+                        };
+                    }
+
+                    word_start
+                } else {
+                    let mut word_end = match text_body.cursor_word_end(cursor.into()) {
+                        TextCursor::None | TextCursor::Empty => return,
+                        TextCursor::Position(cursor) => cursor,
+                    };
+
+                    if word_end == cursor {
+                        word_end =
+                            match text_body.cursor_word_end(text_body.cursor_next(cursor.into())) {
+                                TextCursor::None | TextCursor::Empty => return,
+                                TextCursor::Position(cursor) => cursor,
+                            };
+                    }
+
+                    word_end
+                };
+
+                text_body.set_cursor(cursor.into());
+                text_body.clear_selection();
+                self.reset_cursor_blink();
+            } else {
+                let amt = (self.theme.text_height * 1.2).round();
+
+                self.v_scroll_b.scroll(
+                    if direction == Direction::Up {
+                        -amt
+                    } else {
+                        amt
+                    },
+                );
+            }
+
             return;
         }
 
