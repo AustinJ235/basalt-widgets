@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign};
 use std::sync::Arc;
-use std::sync::atomic::{self, AtomicBool, AtomicU8};
+use std::sync::atomic::{self, AtomicU8};
 use std::time::{Duration, Instant};
 
 use basalt::input::{MouseButton, Qwerty, WindowState};
@@ -26,6 +26,14 @@ pub struct TextAreaBuilder<'a, C> {
 #[derive(Default)]
 struct Properties {
     placement: WidgetPlacement,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
 }
 
 impl Properties {
@@ -169,9 +177,7 @@ where
             Default::default()
         });
 
-        let selecting = Arc::new(AtomicBool::new(false));
         let cb_text_area = text_area.clone();
-        let cb_selecting = selecting.clone();
         let mut consecutive_presses: u8 = 0;
         let mut last_press_op: Option<Instant> = None;
 
@@ -210,15 +216,59 @@ where
                         if modifiers.shift() {
                             match text_body.selection() {
                                 Some(existing_selection) => {
-                                    text_body.set_selection(existing_selection.extend(cursor));
+                                    let sel_s = match text_body.cursor() {
+                                        TextCursor::None | TextCursor::Empty => {
+                                            existing_selection.start
+                                        },
+                                        TextCursor::Position(existing_cursor) => {
+                                            if existing_cursor == existing_selection.start {
+                                                existing_selection.end
+                                            } else {
+                                                existing_selection.start
+                                            }
+                                        },
+                                    };
+
+                                    let sel_e = cursor.into_position().unwrap();
+
+                                    if sel_s > sel_e {
+                                        text_body.set_selection(TextSelection {
+                                            start: sel_e,
+                                            end: sel_s,
+                                        });
+                                    } else {
+                                        text_body.set_selection(TextSelection {
+                                            start: sel_s,
+                                            end: sel_e,
+                                        });
+                                    }
                                 },
                                 None => {
-                                    text_body.set_cursor(cursor);
+                                    match text_body.cursor() {
+                                        TextCursor::None | TextCursor::Empty => (),
+                                        TextCursor::Position(sel_s) => {
+                                            let sel_e = cursor.into_position().unwrap();
+
+                                            if sel_s > sel_e {
+                                                text_body.set_selection(TextSelection {
+                                                    start: sel_e,
+                                                    end: sel_s,
+                                                });
+                                            } else {
+                                                text_body.set_selection(TextSelection {
+                                                    start: sel_s,
+                                                    end: sel_e,
+                                                });
+                                            }
+                                        },
+                                    }
                                 },
                             }
-                        } else {
-                            text_body.clear_selection();
+
                             text_body.set_cursor(cursor);
+                        } else {
+                            text_body.set_cursor(cursor);
+                            text_body.clear_selection();
                         }
                     },
                     2 | 3 => {
@@ -231,21 +281,35 @@ where
                                 if modifiers.shift() {
                                     match text_body.selection() {
                                         Some(existing_selection) => {
-                                            text_body.set_selection(
-                                                selection.extend(existing_selection),
-                                            );
+                                            if selection.start < existing_selection.start {
+                                                text_body.set_cursor(selection.start.into());
+
+                                                text_body.set_selection(
+                                                    selection.extend(existing_selection),
+                                                );
+                                            } else if selection.end > existing_selection.end {
+                                                text_body.set_cursor(selection.end.into());
+
+                                                text_body.set_selection(
+                                                    selection.extend(existing_selection),
+                                                );
+                                            } else {
+                                                // TODO: What to do here? Is this even reachable?
+                                            }
                                         },
                                         None => {
+                                            text_body.set_cursor(selection.end.into());
                                             text_body.set_selection(selection);
                                         },
                                     }
                                 } else {
+                                    text_body.set_cursor(selection.end.into());
                                     text_body.set_selection(selection);
                                 }
                             },
                             None => {
-                                text_body.clear_selection();
                                 text_body.set_cursor(cursor);
+                                text_body.clear_selection();
                             },
                         }
                     },
@@ -254,7 +318,6 @@ where
 
                 if matches!(text_body.cursor(), TextCursor::Position(..)) {
                     cb_text_area.reset_cursor_blink();
-                    cb_selecting.store(true, atomic::Ordering::Relaxed);
 
                     if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
                         let cb_text_area2 = cb_text_area.clone();
@@ -265,15 +328,6 @@ where
                     }
                 }
 
-                Default::default()
-            });
-
-        let cb_selecting = selecting.clone();
-
-        text_area
-            .editor
-            .on_release(MouseButton::Left, move |_, _, _| {
-                cb_selecting.store(false, atomic::Ordering::Relaxed);
                 Default::default()
             });
 
@@ -304,39 +358,52 @@ where
             ));
 
         let cb_text_area = text_area.clone();
-        let cb_selecting = selecting.clone();
 
         text_area.editor.on_cursor(move |_, window, _| {
-            if !cb_selecting.load(atomic::Ordering::Relaxed) {
+            if !window.is_key_pressed(MouseButton::Left) {
                 return Default::default();
             }
 
             let text_body = cb_text_area.editor.text_body();
 
-            let select_from = match text_body.cursor() {
+            let cursor = match text_body.cursor() {
                 TextCursor::None | TextCursor::Empty => return Default::default(),
                 TextCursor::Position(cursor) => cursor,
             };
 
-            let select_to = match text_body.get_cursor(window.cursor_pos()) {
+            let sel_s = match text_body.selection() {
+                Some(selection) => {
+                    if selection.start == cursor {
+                        selection.end
+                    } else {
+                        selection.start
+                    }
+                },
+                None => cursor,
+            };
+
+            let sel_e = match text_body.get_cursor(window.cursor_pos()) {
                 TextCursor::None | TextCursor::Empty => {
+                    text_body.set_cursor(TextCursor::None);
                     text_body.clear_selection();
                     return Default::default();
                 },
                 TextCursor::Position(cursor) => cursor,
             };
 
-            if select_from == select_to {
+            text_body.set_cursor(sel_e.into());
+
+            if sel_s == sel_e {
                 text_body.clear_selection();
-            } else if select_from < select_to {
+            } else if sel_s > sel_e {
                 text_body.set_selection(TextSelection {
-                    start: select_from,
-                    end: select_to,
+                    start: sel_e,
+                    end: sel_s,
                 });
             } else {
                 text_body.set_selection(TextSelection {
-                    start: select_to,
-                    end: select_from,
+                    start: sel_s,
+                    end: sel_e,
                 });
             }
 
@@ -377,7 +444,7 @@ where
         text_area
             .editor
             .on_press(Qwerty::ArrowLeft, move |_, window_state, _| {
-                cb_text_area.move_cursor_left(window_state);
+                cb_text_area.move_cursor_direction(window_state, Direction::Left);
                 Default::default()
             });
 
@@ -394,7 +461,7 @@ where
             .delay(Some(Duration::from_millis(600)))
             .interval(Duration::from_millis(40))
             .call(move |_, _, _| {
-                cb_text_area.move_cursor_left(&cb_modifiers);
+                cb_text_area.move_cursor_direction(&cb_modifiers, Direction::Left);
                 Default::default()
             })
             .finish()
@@ -405,7 +472,7 @@ where
         text_area
             .editor
             .on_press(Qwerty::ArrowRight, move |_, window_state, _| {
-                cb_text_area.move_cursor_right(window_state);
+                cb_text_area.move_cursor_direction(window_state, Direction::Right);
                 Default::default()
             });
 
@@ -422,7 +489,7 @@ where
             .delay(Some(Duration::from_millis(600)))
             .interval(Duration::from_millis(40))
             .call(move |_, _, _| {
-                cb_text_area.move_cursor_right(&cb_modifiers);
+                cb_text_area.move_cursor_direction(&cb_modifiers, Direction::Right);
                 Default::default()
             })
             .finish()
@@ -433,7 +500,7 @@ where
         text_area
             .editor
             .on_press(Qwerty::ArrowUp, move |_, window_state, _| {
-                cb_text_area.move_cursor_up(window_state);
+                cb_text_area.move_cursor_direction(window_state, Direction::Up);
                 Default::default()
             });
 
@@ -450,7 +517,7 @@ where
             .delay(Some(Duration::from_millis(600)))
             .interval(Duration::from_millis(40))
             .call(move |_, _, _| {
-                cb_text_area.move_cursor_up(&cb_modifiers);
+                cb_text_area.move_cursor_direction(&cb_modifiers, Direction::Up);
                 Default::default()
             })
             .finish()
@@ -461,7 +528,7 @@ where
         text_area
             .editor
             .on_press(Qwerty::ArrowDown, move |_, window_state, _| {
-                cb_text_area.move_cursor_down(window_state);
+                cb_text_area.move_cursor_direction(window_state, Direction::Down);
                 Default::default()
             });
 
@@ -478,7 +545,7 @@ where
             .delay(Some(Duration::from_millis(600)))
             .interval(Duration::from_millis(40))
             .call(move |_, _, _| {
-                cb_text_area.move_cursor_down(&cb_modifiers);
+                cb_text_area.move_cursor_direction(&cb_modifiers, Direction::Down);
                 Default::default()
             })
             .finish()
@@ -635,369 +702,132 @@ impl TextArea {
             .pause(self.state.lock().c_blink_intvl_hid.borrow().unwrap());
     }
 
-    fn move_cursor_left<M>(self: &Arc<Self>, modifiers: M)
+    fn move_cursor_direction<M>(self: &Arc<Self>, modifiers: M, direction: Direction)
     where
         M: Into<Modifiers>,
     {
         let modifiers = modifiers.into();
         let text_body = self.editor.text_body();
 
+        let cursor_direction = |cursor: TextCursor| {
+            match direction {
+                Direction::Left => text_body.cursor_prev(cursor),
+                Direction::Right => text_body.cursor_next(cursor),
+                Direction::Up => text_body.cursor_up(cursor, true),
+                Direction::Down => text_body.cursor_down(cursor, true),
+            }
+        };
+
         if modifiers.shift() {
-            if modifiers.alt() {
-                if modifiers.ctrl() {
-                    // Selection Shrink Word
-                } else {
-                    // Selection Shrink Character
-                    if let Some(mut selection) = text_body.selection() {
-                        selection.end = match text_body.cursor_prev(selection.end.into()) {
-                            TextCursor::Empty | TextCursor::None => return,
+            let cursor = match text_body.cursor() {
+                TextCursor::None | TextCursor::Empty => return,
+                TextCursor::Position(cursor) => cursor,
+            };
+
+            let selection = match text_body.selection() {
+                Some(selection) => selection,
+                None => {
+                    if !modifiers.alt() {
+                        let sel_s = match match direction {
+                            Direction::Left => text_body.cursor_word_start(cursor.into()),
+                            Direction::Right => text_body.cursor_word_end(cursor.into()),
+                            Direction::Up => text_body.cursor_line_start(cursor.into(), true),
+                            Direction::Down => text_body.cursor_line_end(cursor.into(), true),
+                        } {
+                            TextCursor::None | TextCursor::Empty => return,
                             TextCursor::Position(cursor) => cursor,
                         };
 
-                        if selection.end <= selection.start {
-                            text_body.clear_selection();
-                            text_body.set_cursor(selection.start.into());
-                        } else {
-                            text_body.set_selection(selection);
-                        }
+                        text_body.set_selection(TextSelection {
+                            start: sel_s,
+                            end: cursor,
+                        });
+
+                        text_body.set_cursor(sel_s.into());
                     }
-                }
+
+                    return;
+                },
+            };
+
+            let (sel_s, mut sel_e) = if modifiers.alt() == (selection.start == cursor) {
+                (selection.start, selection.end)
             } else {
-                if modifiers.ctrl() {
-                    // Selection Expand Word
-                    match text_body.selection() {
-                        Some(mut selection) => {
-                            let mut word_start =
-                                match text_body.cursor_word_start(selection.start.into()) {
-                                    TextCursor::Empty | TextCursor::None => return,
-                                    TextCursor::Position(cursor) => cursor,
-                                };
+                (selection.end, selection.start)
+            };
 
-                            if selection.start == word_start {
-                                word_start = match text_body.cursor_word_start(
-                                    text_body.cursor_prev(selection.start.into()),
-                                ) {
-                                    TextCursor::Empty | TextCursor::None => return,
-                                    TextCursor::Position(cursor) => cursor,
-                                };
-                            }
+            sel_e = if modifiers.ctrl() {
+                let end = match match direction {
+                    Direction::Left => text_body.cursor_word_start(sel_e.into()),
+                    Direction::Right => text_body.cursor_word_end(sel_e.into()),
+                    Direction::Up => text_body.cursor_line_start(sel_e.into(), true),
+                    Direction::Down => text_body.cursor_line_end(sel_e.into(), true),
+                } {
+                    TextCursor::None | TextCursor::Empty => return,
+                    TextCursor::Position(cursor) => cursor,
+                };
 
-                            selection.start = word_start;
-                            text_body.set_selection(selection);
-                        },
-                        None => {
-                            let end = match text_body.cursor() {
-                                TextCursor::Empty | TextCursor::None => return,
-                                TextCursor::Position(cursor) => cursor,
-                            };
+                if end == sel_e {
+                    let next_cursor = cursor_direction(end.into());
 
-                            let mut start = match text_body.cursor_word_start(end.into()) {
-                                TextCursor::Empty | TextCursor::None => return,
-                                TextCursor::Position(cursor) => cursor,
-                            };
-
-                            if start == end {
-                                start = match text_body
-                                    .cursor_word_start(text_body.cursor_prev(end.into()))
-                                {
-                                    TextCursor::Empty | TextCursor::None => return,
-                                    TextCursor::Position(cursor) => cursor,
-                                };
-                            }
-
-                            text_body.set_selection(TextSelection {
-                                start,
-                                end,
-                            });
-                        },
+                    match match direction {
+                        Direction::Left => text_body.cursor_word_start(next_cursor),
+                        Direction::Right => text_body.cursor_word_end(next_cursor),
+                        Direction::Up => text_body.cursor_line_start(next_cursor, true),
+                        Direction::Down => text_body.cursor_line_end(next_cursor, true),
+                    } {
+                        TextCursor::None | TextCursor::Empty => return,
+                        TextCursor::Position(cursor) => cursor,
                     }
                 } else {
-                    // Selection Expand Character
-                    match text_body.selection() {
-                        Some(mut selection) => {
-                            selection.start = match text_body.cursor_prev(selection.start.into()) {
-                                TextCursor::Empty | TextCursor::None => return,
-                                TextCursor::Position(cursor) => cursor,
-                            };
-
-                            text_body.set_selection(selection);
-                        },
-                        None => {
-                            let end = match text_body.cursor() {
-                                TextCursor::Empty | TextCursor::None => return,
-                                TextCursor::Position(cursor) => cursor,
-                            };
-
-                            let start = match text_body.cursor_prev(end.into()) {
-                                TextCursor::Empty | TextCursor::None => return,
-                                TextCursor::Position(cursor) => cursor,
-                            };
-
-                            text_body.set_selection(TextSelection {
-                                start,
-                                end,
-                            });
-                        },
-                    }
+                    end
                 }
+            } else {
+                match cursor_direction(sel_e.into()) {
+                    TextCursor::None | TextCursor::Empty => return,
+                    TextCursor::Position(cursor) => cursor,
+                }
+            };
+
+            if sel_s > sel_e {
+                text_body.set_selection(TextSelection {
+                    start: sel_e,
+                    end: sel_s,
+                });
+            } else {
+                text_body.set_selection(TextSelection {
+                    start: sel_s,
+                    end: sel_e,
+                });
             }
 
+            if modifiers.alt() {
+                text_body.set_cursor(sel_s.into());
+            } else {
+                text_body.set_cursor(sel_e.into())
+            }
+
+            self.reset_cursor_blink();
             return;
         } else if modifiers.ctrl() {
-            // Scroll Left
+            // Scroll
             return;
         }
 
         match text_body.selection() {
             Some(selection) => {
                 text_body.clear_selection();
-                text_body.set_cursor(selection.start.into());
+
+                text_body.set_cursor(match direction {
+                    Direction::Left | Direction::Up => selection.start.into(),
+                    Direction::Right | Direction::Down => selection.end.into(),
+                });
             },
             None => {
-                let cursor_prev = text_body.cursor_prev(text_body.cursor());
-
-                if matches!(cursor_prev, TextCursor::Position(..)) {
-                    text_body.set_cursor(cursor_prev);
+                if let TextCursor::Position(cursor) = cursor_direction(text_body.cursor()) {
+                    text_body.set_cursor(cursor.into());
                 }
             },
-        }
-
-        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-            let text_area = self.clone();
-
-            text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
-            });
-        }
-
-        self.reset_cursor_blink();
-    }
-
-    fn move_cursor_right<M>(self: &Arc<Self>, modifiers: M)
-    where
-        M: Into<Modifiers>,
-    {
-        let modifiers = modifiers.into();
-        let text_body = self.editor.text_body();
-
-        if modifiers.shift() {
-            if modifiers.alt() {
-                if modifiers.ctrl() {
-                    // Selection Shrink Word
-                } else {
-                    // Selection Shrink Character
-                    if let Some(mut selection) = text_body.selection() {
-                        selection.start = match text_body.cursor_next(selection.start.into()) {
-                            TextCursor::Empty | TextCursor::None => return,
-                            TextCursor::Position(cursor) => cursor,
-                        };
-
-                        if selection.start >= selection.end {
-                            text_body.clear_selection();
-                            text_body.set_cursor(selection.end.into());
-                        } else {
-                            text_body.set_selection(selection);
-                        }
-                    }
-                }
-            } else {
-                if modifiers.ctrl() {
-                    // Selection Expand Word
-                    match text_body.selection() {
-                        Some(mut selection) => {
-                            let mut word_end = match text_body.cursor_word_end(selection.end.into())
-                            {
-                                TextCursor::Empty | TextCursor::None => return,
-                                TextCursor::Position(cursor) => cursor,
-                            };
-
-                            if selection.end == word_end {
-                                word_end = match text_body
-                                    .cursor_word_end(text_body.cursor_next(selection.end.into()))
-                                {
-                                    TextCursor::Empty | TextCursor::None => return,
-                                    TextCursor::Position(cursor) => cursor,
-                                };
-                            }
-
-                            selection.end = word_end;
-                            text_body.set_selection(selection);
-                        },
-                        None => {
-                            let start = match text_body.cursor() {
-                                TextCursor::Empty | TextCursor::None => return,
-                                TextCursor::Position(cursor) => cursor,
-                            };
-
-                            let mut end = match text_body.cursor_word_end(start.into()) {
-                                TextCursor::Empty | TextCursor::None => return,
-                                TextCursor::Position(cursor) => cursor,
-                            };
-
-                            if start == end {
-                                end = match text_body
-                                    .cursor_word_end(text_body.cursor_next(start.into()))
-                                {
-                                    TextCursor::Empty | TextCursor::None => return,
-                                    TextCursor::Position(cursor) => cursor,
-                                };
-                            }
-
-                            text_body.set_selection(TextSelection {
-                                start,
-                                end,
-                            });
-                        },
-                    }
-                } else {
-                    // Selection Expand Character
-                    match text_body.selection() {
-                        Some(mut selection) => {
-                            selection.end = match text_body.cursor_next(selection.end.into()) {
-                                TextCursor::Empty | TextCursor::None => return,
-                                TextCursor::Position(cursor) => cursor,
-                            };
-
-                            text_body.set_selection(selection);
-                        },
-                        None => {
-                            let start = match text_body.cursor() {
-                                TextCursor::Empty | TextCursor::None => return,
-                                TextCursor::Position(cursor) => cursor,
-                            };
-
-                            let end = match text_body.cursor_next(start.into()) {
-                                TextCursor::Empty | TextCursor::None => return,
-                                TextCursor::Position(cursor) => cursor,
-                            };
-
-                            text_body.set_selection(TextSelection {
-                                start,
-                                end,
-                            });
-                        },
-                    }
-                }
-            }
-
-            return;
-        } else if modifiers.ctrl() {
-            // Scroll Right
-            return;
-        }
-
-        match text_body.selection() {
-            Some(selection) => {
-                text_body.clear_selection();
-                text_body.set_cursor(selection.end.into());
-            },
-            None => {
-                let cursor_next = text_body.cursor_next(text_body.cursor());
-
-                if matches!(cursor_next, TextCursor::Position(..)) {
-                    text_body.set_cursor(cursor_next);
-                }
-            },
-        }
-
-        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-            let text_area = self.clone();
-
-            text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
-            });
-        }
-
-        self.reset_cursor_blink();
-    }
-
-    fn move_cursor_up<M>(self: &Arc<Self>, modifiers: M)
-    where
-        M: Into<Modifiers>,
-    {
-        let modifiers = modifiers.into();
-        let text_body = self.editor.text_body();
-
-        if modifiers.shift() {
-            if modifiers.alt() {
-                if modifiers.ctrl() {
-                    // Selection Shrink Line
-                } else {
-                    // Selection Shrink Character
-                }
-            } else {
-                if modifiers.ctrl() {
-                    // Selection Expand Line
-                } else {
-                    // Selection Expand Character
-                }
-            }
-
-            return;
-        } else if modifiers.ctrl() {
-            // Scroll Up
-            return;
-        }
-
-        if let Some(selection) = text_body.selection() {
-            text_body.clear_selection();
-            text_body.set_cursor(selection.start.into());
-        }
-
-        let cursor_up = text_body.cursor_up(text_body.cursor(), true);
-
-        if matches!(cursor_up, TextCursor::Position(..)) {
-            text_body.set_cursor(cursor_up);
-        }
-
-        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-            let text_area = self.clone();
-
-            text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
-            });
-        }
-
-        self.reset_cursor_blink();
-    }
-
-    fn move_cursor_down<M>(self: &Arc<Self>, modifiers: M)
-    where
-        M: Into<Modifiers>,
-    {
-        let modifiers = modifiers.into();
-        let text_body = self.editor.text_body();
-
-        if modifiers.shift() {
-            if modifiers.alt() {
-                if modifiers.ctrl() {
-                    // Selection Shrink Line
-                } else {
-                    // Selection Shrink Character
-                }
-            } else {
-                if modifiers.ctrl() {
-                    // Selection Expand Line
-                } else {
-                    // Selection Expand Character
-                }
-            }
-
-            return;
-        } else if modifiers.ctrl() {
-            // Scroll Down
-            return;
-        }
-
-        if let Some(selection) = text_body.selection() {
-            text_body.clear_selection();
-            text_body.set_cursor(selection.end.into());
-        }
-
-        let cursor_down = text_body.cursor_down(text_body.cursor(), true);
-
-        if matches!(cursor_down, TextCursor::Position(..)) {
-            text_body.set_cursor(cursor_down);
         }
 
         if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
