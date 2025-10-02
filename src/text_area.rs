@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 use basalt::input::{MouseButton, Qwerty, WindowState};
 use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{
-    Bin, BinPostUpdate, BinStyle, Position, TextAttrs, TextBody, TextCursor, TextSelection,
-    TextSpan,
+    Bin, BinPostUpdate, BinStyle, PosTextCursor, Position, TextAttrs, TextBody, TextBodyGuard,
+    TextCursor, TextSelection, TextSpan,
 };
 use basalt::interval::IntvlHookID;
 use parking_lot::ReentrantMutex;
@@ -738,10 +738,17 @@ impl TextArea {
                             TextCursor::Position(cursor) => cursor,
                         };
 
-                        text_body.set_selection(TextSelection {
-                            start: sel_s,
-                            end: cursor,
-                        });
+                        if sel_s > cursor {
+                            text_body.set_selection(TextSelection {
+                                start: cursor,
+                                end: sel_s,
+                            });
+                        } else {
+                            text_body.set_selection(TextSelection {
+                                start: sel_s,
+                                end: cursor,
+                            });
+                        }
 
                         text_body.set_cursor(sel_s.into());
                     }
@@ -757,31 +764,7 @@ impl TextArea {
             };
 
             sel_e = if modifiers.ctrl() {
-                let end = match match direction {
-                    Direction::Left => text_body.cursor_word_start(sel_e.into()),
-                    Direction::Right => text_body.cursor_word_end(sel_e.into()),
-                    Direction::Up => text_body.cursor_line_start(sel_e.into(), true),
-                    Direction::Down => text_body.cursor_line_end(sel_e.into(), true),
-                } {
-                    TextCursor::None | TextCursor::Empty => return,
-                    TextCursor::Position(cursor) => cursor,
-                };
-
-                if end == sel_e {
-                    let next_cursor = cursor_direction(end.into());
-
-                    match match direction {
-                        Direction::Left => text_body.cursor_word_start(next_cursor),
-                        Direction::Right => text_body.cursor_word_end(next_cursor),
-                        Direction::Up => text_body.cursor_line_start(next_cursor, true),
-                        Direction::Down => text_body.cursor_line_end(next_cursor, true),
-                    } {
-                        TextCursor::None | TextCursor::Empty => return,
-                        TextCursor::Position(cursor) => cursor,
-                    }
-                } else {
-                    end
-                }
+                cursor_next_word_line(&text_body, sel_e, direction)
             } else {
                 match cursor_direction(sel_e.into()) {
                     TextCursor::None | TextCursor::Empty => return,
@@ -827,39 +810,7 @@ impl TextArea {
                     },
                 };
 
-                cursor = if direction == Direction::Left {
-                    let mut word_start = match text_body.cursor_word_start(cursor.into()) {
-                        TextCursor::None | TextCursor::Empty => return,
-                        TextCursor::Position(cursor) => cursor,
-                    };
-
-                    if word_start == cursor {
-                        word_start = match text_body
-                            .cursor_word_start(text_body.cursor_prev(cursor.into()))
-                        {
-                            TextCursor::None | TextCursor::Empty => return,
-                            TextCursor::Position(cursor) => cursor,
-                        };
-                    }
-
-                    word_start
-                } else {
-                    let mut word_end = match text_body.cursor_word_end(cursor.into()) {
-                        TextCursor::None | TextCursor::Empty => return,
-                        TextCursor::Position(cursor) => cursor,
-                    };
-
-                    if word_end == cursor {
-                        word_end =
-                            match text_body.cursor_word_end(text_body.cursor_next(cursor.into())) {
-                                TextCursor::None | TextCursor::Empty => return,
-                                TextCursor::Position(cursor) => cursor,
-                            };
-                    }
-
-                    word_end
-                };
-
+                cursor = cursor_next_word_line(&text_body, cursor, direction);
                 text_body.set_cursor(cursor.into());
                 text_body.clear_selection();
                 self.reset_cursor_blink();
@@ -1123,6 +1074,45 @@ impl TextArea {
             (&self.editor, editor_style),
         ]);
     }
+}
+
+fn cursor_next_word_line(
+    text_body: &TextBodyGuard,
+    cursor: PosTextCursor,
+    direction: Direction,
+) -> PosTextCursor {
+    let edge = match match direction {
+        Direction::Left => text_body.cursor_word_start(cursor.into()),
+        Direction::Right => text_body.cursor_word_end(cursor.into()),
+        Direction::Up => text_body.cursor_line_start(cursor.into(), true),
+        Direction::Down => text_body.cursor_line_end(cursor.into(), true),
+    } {
+        TextCursor::None | TextCursor::Empty => return cursor,
+        TextCursor::Position(cursor) => cursor,
+    };
+
+    if !text_body.are_cursors_equivalent(cursor.into(), edge.into()) {
+        return edge;
+    }
+
+    let next = match match direction {
+        Direction::Left | Direction::Up => text_body.cursor_prev(cursor.into()),
+        Direction::Right | Direction::Down => text_body.cursor_next(cursor.into()),
+    } {
+        TextCursor::None | TextCursor::Empty => return edge,
+        TextCursor::Position(cursor) => cursor,
+    };
+
+    match match direction {
+        Direction::Left => text_body.cursor_word_start(next.into()),
+        Direction::Right => text_body.cursor_word_end(next.into()),
+        Direction::Up => text_body.cursor_line_start(next.into(), true),
+        Direction::Down => text_body.cursor_line_end(next.into(), true),
+    } {
+        TextCursor::None | TextCursor::Empty => next,
+        TextCursor::Position(cursor) => cursor,
+    }
+    .into()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
