@@ -577,7 +577,7 @@ where
         text_area.editor.on_character(move |_, window, mut c| {
             let modifiers = Modifiers::from(window);
 
-            if modifiers.ctrl() || modifiers.alt() {
+            if (!c.is_backspace() && modifiers.ctrl()) || modifiers.alt() {
                 return Default::default();
             }
 
@@ -592,7 +592,33 @@ where
 
             if c.is_backspace() {
                 if !selection_deleted {
-                    text_body.set_cursor(text_body.cursor_delete(text_body.cursor()));
+                    if modifiers.ctrl() {
+                        let delete_end = match text_body.cursor() {
+                            TextCursor::None | TextCursor::Empty => return Default::default(),
+                            TextCursor::Position(cursor) => cursor,
+                        };
+
+                        let delete_start = cursor_next_word_line(
+                            &text_body,
+                            delete_end,
+                            if modifiers.shift() {
+                                Direction::Up
+                            } else {
+                                Direction::Left
+                            },
+                        );
+
+                        if delete_end == delete_start {
+                            return Default::default();
+                        }
+
+                        text_body.set_cursor(text_body.selection_delete(TextSelection {
+                            start: delete_start,
+                            end: delete_end,
+                        }));
+                    } else {
+                        text_body.set_cursor(text_body.cursor_delete(text_body.cursor()));
+                    }
                 }
             } else {
                 if c.0 == '\r' {
