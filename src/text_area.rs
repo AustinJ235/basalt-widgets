@@ -229,37 +229,19 @@ where
                                         },
                                     };
 
-                                    let sel_e = cursor.into_position().unwrap();
-
-                                    if sel_s > sel_e {
-                                        text_body.set_selection(TextSelection {
-                                            start: sel_e,
-                                            end: sel_s,
-                                        });
-                                    } else {
-                                        text_body.set_selection(TextSelection {
-                                            start: sel_s,
-                                            end: sel_e,
-                                        });
-                                    }
+                                    text_body.set_selection(TextSelection::unordered(
+                                        sel_s,
+                                        cursor.into_position().unwrap(),
+                                    ))
                                 },
                                 None => {
                                     match text_body.cursor() {
                                         TextCursor::None | TextCursor::Empty => (),
                                         TextCursor::Position(sel_s) => {
-                                            let sel_e = cursor.into_position().unwrap();
-
-                                            if sel_s > sel_e {
-                                                text_body.set_selection(TextSelection {
-                                                    start: sel_e,
-                                                    end: sel_s,
-                                                });
-                                            } else {
-                                                text_body.set_selection(TextSelection {
-                                                    start: sel_s,
-                                                    end: sel_e,
-                                                });
-                                            }
+                                            text_body.set_selection(TextSelection::unordered(
+                                                sel_s,
+                                                cursor.into_position().unwrap(),
+                                            ));
                                         },
                                     }
                                 },
@@ -281,20 +263,17 @@ where
                                 if modifiers.shift() {
                                     match text_body.selection() {
                                         Some(existing_selection) => {
-                                            if selection.start < existing_selection.start {
-                                                text_body.set_cursor(selection.start.into());
+                                            text_body.set_selection(TextSelection {
+                                                start: existing_selection
+                                                    .start
+                                                    .min(selection.start),
+                                                end: existing_selection.end.max(selection.end),
+                                            });
 
-                                                text_body.set_selection(
-                                                    selection.extend(existing_selection),
-                                                );
-                                            } else if selection.end > existing_selection.end {
+                                            if selection.start > existing_selection.start {
                                                 text_body.set_cursor(selection.end.into());
-
-                                                text_body.set_selection(
-                                                    selection.extend(existing_selection),
-                                                );
                                             } else {
-                                                // TODO: What to do here? Is this even reachable?
+                                                text_body.set_cursor(selection.start.into());
                                             }
                                         },
                                         None => {
@@ -395,16 +374,8 @@ where
 
             if sel_s == sel_e {
                 text_body.clear_selection();
-            } else if sel_s > sel_e {
-                text_body.set_selection(TextSelection {
-                    start: sel_e,
-                    end: sel_s,
-                });
             } else {
-                text_body.set_selection(TextSelection {
-                    start: sel_s,
-                    end: sel_e,
-                });
+                text_body.set_selection(TextSelection::unordered(sel_s, sel_e));
             }
 
             Default::default()
@@ -738,18 +709,7 @@ impl TextArea {
                             TextCursor::Position(cursor) => cursor,
                         };
 
-                        if sel_s > cursor {
-                            text_body.set_selection(TextSelection {
-                                start: cursor,
-                                end: sel_s,
-                            });
-                        } else {
-                            text_body.set_selection(TextSelection {
-                                start: sel_s,
-                                end: cursor,
-                            });
-                        }
-
+                        text_body.set_selection(TextSelection::unordered(sel_s, cursor));
                         text_body.set_cursor(sel_s.into());
                     }
 
@@ -772,17 +732,7 @@ impl TextArea {
                 }
             };
 
-            if sel_s > sel_e {
-                text_body.set_selection(TextSelection {
-                    start: sel_e,
-                    end: sel_s,
-                });
-            } else {
-                text_body.set_selection(TextSelection {
-                    start: sel_s,
-                    end: sel_e,
-                });
-            }
+            text_body.set_selection(TextSelection::unordered(sel_s, sel_e));
 
             if modifiers.alt() {
                 text_body.set_cursor(sel_s.into());
