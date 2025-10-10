@@ -415,7 +415,7 @@ where
         text_area
             .editor
             .on_press(Qwerty::ArrowLeft, move |_, window_state, _| {
-                cb_text_area.move_cursor_direction(window_state, Direction::Left);
+                cb_text_area.press_arrow_key(window_state, Direction::Left);
                 Default::default()
             });
 
@@ -432,7 +432,7 @@ where
             .delay(Some(Duration::from_millis(600)))
             .interval(Duration::from_millis(40))
             .call(move |_, _, _| {
-                cb_text_area.move_cursor_direction(&cb_modifiers, Direction::Left);
+                cb_text_area.press_arrow_key(&cb_modifiers, Direction::Left);
                 Default::default()
             })
             .finish()
@@ -443,7 +443,7 @@ where
         text_area
             .editor
             .on_press(Qwerty::ArrowRight, move |_, window_state, _| {
-                cb_text_area.move_cursor_direction(window_state, Direction::Right);
+                cb_text_area.press_arrow_key(window_state, Direction::Right);
                 Default::default()
             });
 
@@ -460,7 +460,7 @@ where
             .delay(Some(Duration::from_millis(600)))
             .interval(Duration::from_millis(40))
             .call(move |_, _, _| {
-                cb_text_area.move_cursor_direction(&cb_modifiers, Direction::Right);
+                cb_text_area.press_arrow_key(&cb_modifiers, Direction::Right);
                 Default::default()
             })
             .finish()
@@ -471,7 +471,7 @@ where
         text_area
             .editor
             .on_press(Qwerty::ArrowUp, move |_, window_state, _| {
-                cb_text_area.move_cursor_direction(window_state, Direction::Up);
+                cb_text_area.press_arrow_key(window_state, Direction::Up);
                 Default::default()
             });
 
@@ -488,7 +488,7 @@ where
             .delay(Some(Duration::from_millis(600)))
             .interval(Duration::from_millis(40))
             .call(move |_, _, _| {
-                cb_text_area.move_cursor_direction(&cb_modifiers, Direction::Up);
+                cb_text_area.press_arrow_key(&cb_modifiers, Direction::Up);
                 Default::default()
             })
             .finish()
@@ -499,7 +499,7 @@ where
         text_area
             .editor
             .on_press(Qwerty::ArrowDown, move |_, window_state, _| {
-                cb_text_area.move_cursor_direction(window_state, Direction::Down);
+                cb_text_area.press_arrow_key(window_state, Direction::Down);
                 Default::default()
             });
 
@@ -516,7 +516,7 @@ where
             .delay(Some(Duration::from_millis(600)))
             .interval(Duration::from_millis(40))
             .call(move |_, _, _| {
-                cb_text_area.move_cursor_direction(&cb_modifiers, Direction::Down);
+                cb_text_area.press_arrow_key(&cb_modifiers, Direction::Down);
                 Default::default()
             })
             .finish()
@@ -524,17 +524,21 @@ where
 
         let cb_text_area = text_area.clone();
 
-        text_area.editor.on_press(Qwerty::Home, move |_, _, _| {
-            cb_text_area.move_cursor_sol();
-            Default::default()
-        });
+        text_area
+            .editor
+            .on_press(Qwerty::Home, move |_, window_state, _| {
+                cb_text_area.press_home(window_state);
+                Default::default()
+            });
 
         let cb_text_area = text_area.clone();
 
-        text_area.editor.on_press(Qwerty::End, move |_, _, _| {
-            cb_text_area.move_cursor_eol();
-            Default::default()
-        });
+        text_area
+            .editor
+            .on_press(Qwerty::End, move |_, window_state, _| {
+                cb_text_area.press_end(window_state);
+                Default::default()
+            });
 
         for key_combo in [[Qwerty::LCtrl, Qwerty::C], [Qwerty::RCtrl, Qwerty::C]] {
             let cb_text_area = text_area.clone();
@@ -699,7 +703,7 @@ impl TextArea {
             .pause(self.state.lock().c_blink_intvl_hid.borrow().unwrap());
     }
 
-    fn move_cursor_direction<M>(self: &Arc<Self>, modifiers: M, direction: Direction)
+    fn press_arrow_key<M>(self: &Arc<Self>, modifiers: M, direction: Direction)
     where
         M: Into<Modifiers>,
     {
@@ -832,54 +836,98 @@ impl TextArea {
         self.reset_cursor_blink();
     }
 
-    fn move_cursor_sol(self: &Arc<Self>) {
+    fn press_home<M>(self: &Arc<Self>, modifiers: M)
+    where
+        M: Into<Modifiers>,
+    {
+        let modifiers = modifiers.into();
         let text_body = self.editor.text_body();
 
-        if let Some(selection) = text_body.selection() {
-            text_body.clear_selection();
-            text_body.set_cursor(selection.start.into());
+        if modifiers.shift() {
+            if modifiers.ctrl() {
+                // Move selection end to start of body
+                // TODO:
+            } else {
+                // Move selection end to start of line
+                // TODO:
+            }
+        } else {
+            if let Some(selection) = text_body.selection() {
+                text_body.clear_selection();
+                text_body.set_cursor(selection.start.into());
+            }
+
+            let cursor = if modifiers.ctrl() {
+                match text_body.select_all() {
+                    Some(selection) => selection.start.into(),
+                    None => TextCursor::Empty,
+                }
+            } else {
+                match text_body.cursor_line_start(text_body.cursor(), true) {
+                    TextCursor::None => TextCursor::Empty,
+                    cursor => cursor,
+                }
+            };
+
+            text_body.set_cursor(cursor);
+
+            if let Some(cursor_bounds) = text_body.cursor_bounds(cursor) {
+                let text_area = self.clone();
+
+                text_body.bin_on_update(move |_, editor_bpu| {
+                    text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
+                });
+            }
+
+            self.reset_cursor_blink();
         }
-
-        let cursor_sol = text_body.cursor_line_start(text_body.cursor(), true);
-
-        if matches!(cursor_sol, TextCursor::Position(..)) {
-            text_body.set_cursor(cursor_sol);
-        }
-
-        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-            let text_area = self.clone();
-
-            text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
-            });
-        }
-
-        self.reset_cursor_blink();
     }
 
-    fn move_cursor_eol(self: &Arc<Self>) {
+    fn press_end<M>(self: &Arc<Self>, modifiers: M)
+    where
+        M: Into<Modifiers>,
+    {
+        let modifiers = modifiers.into();
         let text_body = self.editor.text_body();
 
-        if let Some(selection) = text_body.selection() {
-            text_body.clear_selection();
-            text_body.set_cursor(selection.end.into());
+        if modifiers.shift() {
+            if modifiers.ctrl() {
+                // Move selection end to end of body
+                // TODO:
+            } else {
+                // Move selection end to end of line
+                // TODO:
+            }
+        } else {
+            if let Some(selection) = text_body.selection() {
+                text_body.clear_selection();
+                text_body.set_cursor(selection.end.into());
+            }
+
+            let cursor = if modifiers.ctrl() {
+                match text_body.select_all() {
+                    Some(selection) => selection.end.into(),
+                    None => TextCursor::Empty,
+                }
+            } else {
+                match text_body.cursor_line_end(text_body.cursor(), true) {
+                    TextCursor::None => TextCursor::Empty,
+                    cursor => cursor,
+                }
+            };
+
+            text_body.set_cursor(cursor);
+
+            if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+                let text_area = self.clone();
+
+                text_body.bin_on_update(move |_, editor_bpu| {
+                    text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
+                });
+            }
+
+            self.reset_cursor_blink();
         }
-
-        let cursor_eol = text_body.cursor_line_end(text_body.cursor(), true);
-
-        if matches!(cursor_eol, TextCursor::Position(..)) {
-            text_body.set_cursor(cursor_eol);
-        }
-
-        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-            let text_area = self.clone();
-
-            text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
-            });
-        }
-
-        self.reset_cursor_blink();
     }
 
     fn copy(self: &Arc<Self>) {
