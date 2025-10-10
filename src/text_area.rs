@@ -844,12 +844,53 @@ impl TextArea {
         let text_body = self.editor.text_body();
 
         if modifiers.shift() {
-            if modifiers.ctrl() {
-                // Move selection end to start of body
-                // TODO:
+            let cursor = match text_body.cursor() {
+                TextCursor::None | TextCursor::Empty => return,
+                TextCursor::Position(cursor) => cursor,
+            };
+
+            let selection = match text_body.selection() {
+                Some(selection) => selection,
+                None => {
+                    if !modifiers.alt() {
+                        let sel_s = if modifiers.ctrl() {
+                            match text_body.select_all() {
+                                Some(selection) => selection.start,
+                                None => return,
+                            }
+                        } else {
+                            cursor_next_word_line(&text_body, cursor, Direction::Up)
+                        };
+
+                        text_body.set_selection(TextSelection::unordered(sel_s, cursor));
+                        text_body.set_cursor(sel_s.into());
+                    }
+
+                    return;
+                },
+            };
+
+            let (sel_s, mut sel_e) = if modifiers.alt() == (selection.start == cursor) {
+                (selection.start, selection.end)
             } else {
-                // Move selection end to start of line
-                // TODO:
+                (selection.end, selection.start)
+            };
+
+            sel_e = if modifiers.ctrl() {
+                match text_body.select_all() {
+                    Some(selection) => selection.start,
+                    None => return,
+                }
+            } else {
+                cursor_next_word_line(&text_body, sel_e, Direction::Up)
+            };
+
+            text_body.set_selection(TextSelection::unordered(sel_s, sel_e));
+
+            if modifiers.alt() {
+                text_body.set_cursor(sel_s.into());
+            } else {
+                text_body.set_cursor(sel_e.into())
             }
         } else {
             if let Some(selection) = text_body.selection() {
@@ -870,17 +911,17 @@ impl TextArea {
             };
 
             text_body.set_cursor(cursor);
-
-            if let Some(cursor_bounds) = text_body.cursor_bounds(cursor) {
-                let text_area = self.clone();
-
-                text_body.bin_on_update(move |_, editor_bpu| {
-                    text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
-                });
-            }
-
-            self.reset_cursor_blink();
         }
+
+        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+            let text_area = self.clone();
+
+            text_body.bin_on_update(move |_, editor_bpu| {
+                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
+            });
+        }
+
+        self.reset_cursor_blink();
     }
 
     fn press_end<M>(self: &Arc<Self>, modifiers: M)
