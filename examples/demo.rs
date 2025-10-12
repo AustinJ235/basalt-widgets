@@ -170,7 +170,7 @@ fn main() {
 
         let _text_area = background
             .create_widget()
-            .text_area()
+            .text_editor()
             .with_text(
                 "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex \
                  sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis \

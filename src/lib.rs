@@ -17,7 +17,7 @@ mod scroll_bar;
 mod select;
 mod spin_button;
 mod switch_button;
-mod text_area;
+mod text_editor;
 mod theme;
 mod toggle_button;
 
@@ -36,7 +36,7 @@ pub use self::scroll_bar::{ScrollAxis, ScrollBar};
 pub use self::select::Select;
 pub use self::spin_button::SpinButton;
 pub use self::switch_button::SwitchButton;
-pub use self::text_area::TextArea;
+pub use self::text_editor::TextEditor;
 pub use self::theme::{Theme, ThemeColors};
 pub use self::toggle_button::ToggleButton;
 

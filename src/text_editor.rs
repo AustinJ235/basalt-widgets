@@ -16,8 +16,8 @@ use parking_lot::ReentrantMutex;
 use crate::builder::WidgetBuilder;
 use crate::{ScrollAxis, ScrollBar, Theme, WidgetContainer, WidgetPlacement, ulps_eq};
 
-/// Builder for [`TextArea`]
-pub struct TextAreaBuilder<'a, C> {
+/// Builder for [`TextEditor`]
+pub struct TextEditorBuilder<'a, C> {
     widget: WidgetBuilder<'a, C>,
     props: Properties,
     text_body: TextBody,
@@ -36,7 +36,7 @@ impl Properties {
     }
 }
 
-impl<'a, C> TextAreaBuilder<'a, C>
+impl<'a, C> TextEditorBuilder<'a, C>
 where
     C: WidgetContainer,
 {
@@ -46,7 +46,7 @@ where
                 builder
                     .placement
                     .take()
-                    .unwrap_or_else(|| TextArea::default_placement(&builder.theme)),
+                    .unwrap_or_else(|| TextEditor::default_placement(&builder.theme)),
             ),
             widget: builder,
             text_body: Default::default(),
@@ -73,8 +73,8 @@ where
         self
     }
 
-    /// Finish building the [`TextArea`].
-    pub fn build(self) -> Arc<TextArea> {
+    /// Finish building the [`TextEditor`].
+    pub fn build(self) -> Arc<TextEditor> {
         let window = self
             .widget
             .container
@@ -121,7 +121,7 @@ where
             .container_bin()
             .add_child(container.clone());
 
-        let text_area = Arc::new(TextArea {
+        let text_editor = Arc::new(TextEditor {
             theme: self.widget.theme,
             props: self.props,
             container,
@@ -134,46 +134,46 @@ where
             }),
         });
 
-        let cb_text_area = text_area.clone();
+        let cb_text_editor = text_editor.clone();
 
-        text_area.editor.on_focus(move |_, _| {
-            if cb_text_area.theme.border.is_some() {
-                cb_text_area.editor.style_modify(|style| {
-                    style.border_color_t = cb_text_area.theme.colors.accent1;
-                    style.border_color_b = cb_text_area.theme.colors.accent1;
-                    style.border_color_l = cb_text_area.theme.colors.accent1;
-                    style.border_color_r = cb_text_area.theme.colors.accent1;
+        text_editor.editor.on_focus(move |_, _| {
+            if cb_text_editor.theme.border.is_some() {
+                cb_text_editor.editor.style_modify(|style| {
+                    style.border_color_t = cb_text_editor.theme.colors.accent1;
+                    style.border_color_b = cb_text_editor.theme.colors.accent1;
+                    style.border_color_l = cb_text_editor.theme.colors.accent1;
+                    style.border_color_r = cb_text_editor.theme.colors.accent1;
                 });
 
-                cb_text_area.start_cursor_blink();
+                cb_text_editor.start_cursor_blink();
             }
 
             Default::default()
         });
 
-        let cb_text_area = text_area.clone();
+        let cb_text_editor = text_editor.clone();
 
-        text_area.editor.on_focus_lost(move |_, _| {
-            if cb_text_area.theme.border.is_some() {
-                cb_text_area.editor.style_modify(|style| {
-                    style.border_color_t = cb_text_area.theme.colors.border1;
-                    style.border_color_b = cb_text_area.theme.colors.border1;
-                    style.border_color_l = cb_text_area.theme.colors.border1;
-                    style.border_color_r = cb_text_area.theme.colors.border1;
+        text_editor.editor.on_focus_lost(move |_, _| {
+            if cb_text_editor.theme.border.is_some() {
+                cb_text_editor.editor.style_modify(|style| {
+                    style.border_color_t = cb_text_editor.theme.colors.border1;
+                    style.border_color_b = cb_text_editor.theme.colors.border1;
+                    style.border_color_l = cb_text_editor.theme.colors.border1;
+                    style.border_color_r = cb_text_editor.theme.colors.border1;
                     style.text_body.cursor_color.a = 0.0;
                 });
 
-                cb_text_area.pause_cursor_blink();
+                cb_text_editor.pause_cursor_blink();
             }
 
             Default::default()
         });
 
-        let cb_text_area = text_area.clone();
+        let cb_text_editor = text_editor.clone();
         let mut consecutive_presses: u8 = 0;
         let mut last_press_op: Option<Instant> = None;
 
-        text_area
+        text_editor
             .editor
             .on_press(MouseButton::Left, move |_, window, _| {
                 let modifiers = Modifiers::from(window);
@@ -196,7 +196,7 @@ where
                 }
 
                 last_press_op = Some(Instant::now());
-                let text_body = cb_text_area.editor.text_body();
+                let text_body = cb_text_editor.editor.text_body();
                 let cursor = text_body.get_cursor(window.cursor_pos());
 
                 if !matches!(cursor, TextCursor::Position(..)) {
@@ -288,13 +288,13 @@ where
                 }
 
                 if matches!(text_body.cursor(), TextCursor::Position(..)) {
-                    cb_text_area.reset_cursor_blink();
+                    cb_text_editor.reset_cursor_blink();
 
                     if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-                        let cb_text_area2 = cb_text_area.clone();
+                        let cb_text_editor2 = cb_text_editor.clone();
 
                         text_body.bin_on_update(move |_, editor_bpu| {
-                            cb_text_area2.check_cursor_in_view(editor_bpu, cursor_bounds);
+                            cb_text_editor2.check_cursor_in_view(editor_bpu, cursor_bounds);
                         });
                     }
                 }
@@ -302,10 +302,10 @@ where
                 Default::default()
             });
 
-        let cb_text_area = text_area.clone();
+        let cb_text_editor = text_editor.clone();
         let mut cursor_visible = false;
 
-        *text_area.state.lock().c_blink_intvl_hid.borrow_mut() =
+        *text_editor.state.lock().c_blink_intvl_hid.borrow_mut() =
             Some(window.basalt_ref().interval_ref().do_every(
                 Duration::from_millis(500),
                 None,
@@ -316,7 +316,7 @@ where
                         cursor_visible = !cursor_visible;
                     }
 
-                    cb_text_area.editor.style_modify(|style| {
+                    cb_text_editor.editor.style_modify(|style| {
                         if cursor_visible {
                             style.text_body.cursor_color.a = 1.0;
                         } else {
@@ -328,14 +328,14 @@ where
                 },
             ));
 
-        let cb_text_area = text_area.clone();
+        let cb_text_editor = text_editor.clone();
 
-        text_area.editor.on_cursor(move |_, window, _| {
+        text_editor.editor.on_cursor(move |_, window, _| {
             if !window.is_key_pressed(MouseButton::Left) {
                 return Default::default();
             }
 
-            let text_body = cb_text_area.editor.text_body();
+            let text_body = cb_text_editor.editor.text_body();
 
             let cursor = match text_body.cursor() {
                 TextCursor::None | TextCursor::Empty => return Default::default(),
@@ -385,7 +385,7 @@ where
         ] {
             let cb_modifiers = modifiers.clone();
 
-            text_area.editor.on_press(key, move |_, _, _| {
+            text_editor.editor.on_press(key, move |_, _, _| {
                 let mut modifiers = Modifiers::from(&cb_modifiers);
                 modifiers |= mask;
                 cb_modifiers.store(modifiers.0, atomic::Ordering::SeqCst);
@@ -394,7 +394,7 @@ where
 
             let cb_modifiers = modifiers.clone();
 
-            text_area.editor.on_release(key, move |_, _, _| {
+            text_editor.editor.on_release(key, move |_, _, _| {
                 let mut modifiers = Modifiers::from(&cb_modifiers);
                 modifiers &= Modifiers(255) ^ mask;
                 cb_modifiers.store(modifiers.0, atomic::Ordering::SeqCst);
@@ -408,27 +408,27 @@ where
             Qwerty::ArrowUp,
             Qwerty::ArrowDown,
         ] {
-            let cb_text_area = text_area.clone();
+            let cb_text_editor = text_editor.clone();
 
-            text_area.editor.on_press(key, move |_, window_state, _| {
-                cb_text_area.proc_movement_key(window_state, key);
+            text_editor.editor.on_press(key, move |_, window_state, _| {
+                cb_text_editor.proc_movement_key(window_state, key);
                 Default::default()
             });
 
-            let cb_text_area = text_area.clone();
+            let cb_text_editor = text_editor.clone();
             let cb_modifiers = modifiers.clone();
 
             window
                 .basalt_ref()
                 .input_ref()
                 .hook()
-                .bin(&text_area.editor)
+                .bin(&text_editor.editor)
                 .on_hold()
                 .keys(key)
                 .delay(Some(Duration::from_millis(600)))
                 .interval(Duration::from_millis(40))
                 .call(move |_, _, _| {
-                    cb_text_area.proc_movement_key(&cb_modifiers, key);
+                    cb_text_editor.proc_movement_key(&cb_modifiers, key);
                     Default::default()
                 })
                 .finish()
@@ -436,60 +436,60 @@ where
         }
 
         for key in [Qwerty::Home, Qwerty::End] {
-            let cb_text_area = text_area.clone();
+            let cb_text_editor = text_editor.clone();
 
-            text_area.editor.on_press(key, move |_, window_state, _| {
-                cb_text_area.proc_movement_key(window_state, key);
+            text_editor.editor.on_press(key, move |_, window_state, _| {
+                cb_text_editor.proc_movement_key(window_state, key);
                 Default::default()
             });
         }
 
         for key_combo in [[Qwerty::LCtrl, Qwerty::C], [Qwerty::RCtrl, Qwerty::C]] {
-            let cb_text_area = text_area.clone();
+            let cb_text_editor = text_editor.clone();
 
-            text_area.editor.on_press(key_combo, move |_, _, _| {
-                cb_text_area.copy();
+            text_editor.editor.on_press(key_combo, move |_, _, _| {
+                cb_text_editor.copy();
                 Default::default()
             });
         }
 
         for key_combo in [[Qwerty::LCtrl, Qwerty::X], [Qwerty::RCtrl, Qwerty::X]] {
-            let cb_text_area = text_area.clone();
+            let cb_text_editor = text_editor.clone();
 
-            text_area.editor.on_press(key_combo, move |_, _, _| {
-                cb_text_area.cut();
+            text_editor.editor.on_press(key_combo, move |_, _, _| {
+                cb_text_editor.cut();
                 Default::default()
             });
         }
 
         for key_combo in [[Qwerty::LCtrl, Qwerty::V], [Qwerty::RCtrl, Qwerty::V]] {
-            let cb_text_area = text_area.clone();
+            let cb_text_editor = text_editor.clone();
 
-            text_area.editor.on_press(key_combo, move |_, _, _| {
-                cb_text_area.paste();
+            text_editor.editor.on_press(key_combo, move |_, _, _| {
+                cb_text_editor.paste();
                 Default::default()
             });
         }
 
         for key_combo in [[Qwerty::LCtrl, Qwerty::A], [Qwerty::RCtrl, Qwerty::A]] {
-            let cb_text_area = text_area.clone();
+            let cb_text_editor = text_editor.clone();
 
-            text_area.editor.on_press(key_combo, move |_, _, _| {
-                cb_text_area.select_all();
+            text_editor.editor.on_press(key_combo, move |_, _, _| {
+                cb_text_editor.select_all();
                 Default::default()
             });
         }
 
-        let cb_text_area = text_area.clone();
+        let cb_text_editor = text_editor.clone();
 
-        text_area.editor.on_character(move |_, window, mut c| {
+        text_editor.editor.on_character(move |_, window, mut c| {
             let modifiers = Modifiers::from(window);
 
             if (!c.is_backspace() && modifiers.ctrl()) || modifiers.alt() {
                 return Default::default();
             }
 
-            let text_body = cb_text_area.editor.text_body();
+            let text_body = cb_text_editor.editor.text_body();
             let mut selection_deleted = false;
 
             if let Some(selection) = text_body.selection() {
@@ -537,24 +537,24 @@ where
             }
 
             if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-                let cb_text_area2 = cb_text_area.clone();
+                let cb_text_editor2 = cb_text_editor.clone();
 
                 text_body.bin_on_update(move |_, editor_bpu| {
-                    cb_text_area2.check_cursor_in_view(editor_bpu, cursor_bounds);
+                    cb_text_editor2.check_cursor_in_view(editor_bpu, cursor_bounds);
                 });
             }
 
-            cb_text_area.reset_cursor_blink();
+            cb_text_editor.reset_cursor_blink();
             Default::default()
         });
 
-        text_area.style_update(Some(self.text_body));
-        text_area
+        text_editor.style_update(Some(self.text_body));
+        text_editor
     }
 }
 
-/// TextArea widget.
-pub struct TextArea {
+/// TextEditor widget.
+pub struct TextEditor {
     theme: Theme,
     props: Properties,
     container: Arc<Bin>,
@@ -569,7 +569,7 @@ struct State {
     clipboard: RefCell<String>,
 }
 
-impl TextArea {
+impl TextEditor {
     /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
     pub fn default_placement(theme: &Theme) -> WidgetPlacement {
         let height = theme.spacing + (theme.base_size * 5.0);
@@ -915,10 +915,10 @@ impl TextArea {
         }
 
         if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-            let text_area = self.clone();
+            let text_editor = self.clone();
 
             text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
+                text_editor.check_cursor_in_view(editor_bpu, cursor_bounds);
             });
         }
 
@@ -943,10 +943,10 @@ impl TextArea {
             *self.state.lock().clipboard.borrow_mut() = selection_value;
 
             if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-                let text_area = self.clone();
+                let text_editor = self.clone();
 
                 text_body.bin_on_update(move |_, editor_bpu| {
-                    text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
+                    text_editor.check_cursor_in_view(editor_bpu, cursor_bounds);
                 });
             }
         }
@@ -968,10 +968,10 @@ impl TextArea {
         ));
 
         if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-            let text_area = self.clone();
+            let text_editor = self.clone();
 
             text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
+                text_editor.check_cursor_in_view(editor_bpu, cursor_bounds);
             });
         }
 

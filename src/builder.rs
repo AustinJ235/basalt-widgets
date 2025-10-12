@@ -9,7 +9,7 @@ pub use crate::scroll_bar::ScrollBarBuilder;
 pub use crate::select::SelectBuilder;
 pub use crate::spin_button::SpinButtonBuilder;
 pub use crate::switch_button::SwitchButtonBuilder;
-pub use crate::text_area::TextAreaBuilder;
+pub use crate::text_editor::TextEditorBuilder;
 pub use crate::toggle_button::ToggleButtonBuilder;
 use crate::{Theme, WidgetContainer, WidgetPlacement};
 
@@ -114,7 +114,7 @@ where
     }
 
     /// Transition into building a [`TextArea`](crate::TextArea)
-    pub fn text_area(self) -> TextAreaBuilder<'a, C> {
-        TextAreaBuilder::with_builder(self)
+    pub fn text_editor(self) -> TextEditorBuilder<'a, C> {
+        TextEditorBuilder::with_builder(self)
     }
 }
