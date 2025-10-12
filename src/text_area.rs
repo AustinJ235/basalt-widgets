@@ -28,14 +28,6 @@ struct Properties {
     placement: WidgetPlacement,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Direction {
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
 impl Properties {
     fn new(placement: WidgetPlacement) -> Self {
         Self {
@@ -410,135 +402,47 @@ where
             });
         }
 
-        let cb_text_area = text_area.clone();
+        for key in [
+            Qwerty::ArrowLeft,
+            Qwerty::ArrowRight,
+            Qwerty::ArrowUp,
+            Qwerty::ArrowDown,
+        ] {
+            let cb_text_area = text_area.clone();
 
-        text_area
-            .editor
-            .on_press(Qwerty::ArrowLeft, move |_, window_state, _| {
-                cb_text_area.press_arrow_key(window_state, Direction::Left);
+            text_area.editor.on_press(key, move |_, window_state, _| {
+                cb_text_area.press_arrow_key(window_state, key);
                 Default::default()
             });
 
-        let cb_text_area = text_area.clone();
-        let cb_modifiers = modifiers.clone();
+            let cb_text_area = text_area.clone();
+            let cb_modifiers = modifiers.clone();
 
-        window
-            .basalt_ref()
-            .input_ref()
-            .hook()
-            .bin(&text_area.editor)
-            .on_hold()
-            .keys(Qwerty::ArrowLeft)
-            .delay(Some(Duration::from_millis(600)))
-            .interval(Duration::from_millis(40))
-            .call(move |_, _, _| {
-                cb_text_area.press_arrow_key(&cb_modifiers, Direction::Left);
-                Default::default()
-            })
-            .finish()
-            .unwrap();
+            window
+                .basalt_ref()
+                .input_ref()
+                .hook()
+                .bin(&text_area.editor)
+                .on_hold()
+                .keys(key)
+                .delay(Some(Duration::from_millis(600)))
+                .interval(Duration::from_millis(40))
+                .call(move |_, _, _| {
+                    cb_text_area.press_arrow_key(&cb_modifiers, key);
+                    Default::default()
+                })
+                .finish()
+                .unwrap();
+        }
 
-        let cb_text_area = text_area.clone();
+        for key in [Qwerty::Home, Qwerty::End] {
+            let cb_text_area = text_area.clone();
 
-        text_area
-            .editor
-            .on_press(Qwerty::ArrowRight, move |_, window_state, _| {
-                cb_text_area.press_arrow_key(window_state, Direction::Right);
-                Default::default()
-            });
-
-        let cb_text_area = text_area.clone();
-        let cb_modifiers = modifiers.clone();
-
-        window
-            .basalt_ref()
-            .input_ref()
-            .hook()
-            .bin(&text_area.editor)
-            .on_hold()
-            .keys(Qwerty::ArrowRight)
-            .delay(Some(Duration::from_millis(600)))
-            .interval(Duration::from_millis(40))
-            .call(move |_, _, _| {
-                cb_text_area.press_arrow_key(&cb_modifiers, Direction::Right);
-                Default::default()
-            })
-            .finish()
-            .unwrap();
-
-        let cb_text_area = text_area.clone();
-
-        text_area
-            .editor
-            .on_press(Qwerty::ArrowUp, move |_, window_state, _| {
-                cb_text_area.press_arrow_key(window_state, Direction::Up);
+            text_area.editor.on_press(key, move |_, window_state, _| {
+                cb_text_area.press_home_end(window_state, key);
                 Default::default()
             });
-
-        let cb_text_area = text_area.clone();
-        let cb_modifiers = modifiers.clone();
-
-        window
-            .basalt_ref()
-            .input_ref()
-            .hook()
-            .bin(&text_area.editor)
-            .on_hold()
-            .keys(Qwerty::ArrowUp)
-            .delay(Some(Duration::from_millis(600)))
-            .interval(Duration::from_millis(40))
-            .call(move |_, _, _| {
-                cb_text_area.press_arrow_key(&cb_modifiers, Direction::Up);
-                Default::default()
-            })
-            .finish()
-            .unwrap();
-
-        let cb_text_area = text_area.clone();
-
-        text_area
-            .editor
-            .on_press(Qwerty::ArrowDown, move |_, window_state, _| {
-                cb_text_area.press_arrow_key(window_state, Direction::Down);
-                Default::default()
-            });
-
-        let cb_text_area = text_area.clone();
-        let cb_modifiers = modifiers;
-
-        window
-            .basalt_ref()
-            .input_ref()
-            .hook()
-            .bin(&text_area.editor)
-            .on_hold()
-            .keys(Qwerty::ArrowDown)
-            .delay(Some(Duration::from_millis(600)))
-            .interval(Duration::from_millis(40))
-            .call(move |_, _, _| {
-                cb_text_area.press_arrow_key(&cb_modifiers, Direction::Down);
-                Default::default()
-            })
-            .finish()
-            .unwrap();
-
-        let cb_text_area = text_area.clone();
-
-        text_area
-            .editor
-            .on_press(Qwerty::Home, move |_, window_state, _| {
-                cb_text_area.press_home(window_state);
-                Default::default()
-            });
-
-        let cb_text_area = text_area.clone();
-
-        text_area
-            .editor
-            .on_press(Qwerty::End, move |_, window_state, _| {
-                cb_text_area.press_end(window_state);
-                Default::default()
-            });
+        }
 
         for key_combo in [[Qwerty::LCtrl, Qwerty::C], [Qwerty::RCtrl, Qwerty::C]] {
             let cb_text_area = text_area.clone();
@@ -606,9 +510,9 @@ where
                             &text_body,
                             delete_end,
                             if modifiers.shift() {
-                                Direction::Up
+                                NextWordLineOp::LineStart
                             } else {
-                                Direction::Left
+                                NextWordLineOp::WordStart
                             },
                         );
 
@@ -703,7 +607,7 @@ impl TextArea {
             .pause(self.state.lock().c_blink_intvl_hid.borrow().unwrap());
     }
 
-    fn press_arrow_key<M>(self: &Arc<Self>, modifiers: M, direction: Direction)
+    fn press_arrow_key<M>(self: &Arc<Self>, modifiers: M, key: Qwerty)
     where
         M: Into<Modifiers>,
     {
@@ -711,15 +615,29 @@ impl TextArea {
         let text_body = self.editor.text_body();
 
         let cursor_direction = |cursor: TextCursor| {
-            match direction {
-                Direction::Left => text_body.cursor_prev(cursor),
-                Direction::Right => text_body.cursor_next(cursor),
-                Direction::Up => text_body.cursor_up(cursor, true),
-                Direction::Down => text_body.cursor_down(cursor, true),
+            match key {
+                Qwerty::ArrowLeft => text_body.cursor_prev(cursor),
+                Qwerty::ArrowRight => text_body.cursor_next(cursor),
+                Qwerty::ArrowUp => text_body.cursor_up(cursor, true),
+                Qwerty::ArrowDown => text_body.cursor_down(cursor, true),
+                _ => unreachable!(),
             }
         };
 
+        let next_word_line_op = match key {
+            Qwerty::ArrowLeft => NextWordLineOp::WordStart,
+            Qwerty::ArrowRight => NextWordLineOp::WordEnd,
+            Qwerty::ArrowUp => NextWordLineOp::LineStart,
+            Qwerty::ArrowDown => NextWordLineOp::LineEnd,
+            _ => unreachable!(),
+        };
+
         if modifiers.shift() {
+            if matches!(key, Qwerty::ArrowUp | Qwerty::ArrowDown) && modifiers.ctrl() {
+                // TODO: duplicate line up/down?
+                return;
+            }
+
             let cursor = match text_body.cursor() {
                 TextCursor::None | TextCursor::Empty => return,
                 TextCursor::Position(cursor) => cursor,
@@ -729,11 +647,14 @@ impl TextArea {
                 Some(selection) => selection,
                 None => {
                     if !modifiers.alt() {
-                        let sel_s = match match direction {
-                            Direction::Left => text_body.cursor_word_start(cursor.into()),
-                            Direction::Right => text_body.cursor_word_end(cursor.into()),
-                            Direction::Up => text_body.cursor_line_start(cursor.into(), true),
-                            Direction::Down => text_body.cursor_line_end(cursor.into(), true),
+                        let sel_s = match if modifiers.ctrl() {
+                            match key {
+                                Qwerty::ArrowLeft => text_body.cursor_word_start(cursor.into()),
+                                Qwerty::ArrowRight => text_body.cursor_word_end(cursor.into()),
+                                _ => unreachable!(),
+                            }
+                        } else {
+                            cursor_direction(cursor.into())
                         } {
                             TextCursor::None | TextCursor::Empty => return,
                             TextCursor::Position(cursor) => cursor,
@@ -754,7 +675,7 @@ impl TextArea {
             };
 
             sel_e = if modifiers.ctrl() {
-                cursor_next_word_line(&text_body, sel_e, direction)
+                cursor_next_word_line(&text_body, sel_e, next_word_line_op)
             } else {
                 match cursor_direction(sel_e.into()) {
                     TextCursor::None | TextCursor::Empty => return,
@@ -773,10 +694,10 @@ impl TextArea {
             self.reset_cursor_blink();
             return;
         } else if modifiers.ctrl() {
-            if matches!(direction, Direction::Left | Direction::Right) {
+            if matches!(key, Qwerty::ArrowLeft | Qwerty::ArrowRight) {
                 let mut cursor = match text_body.selection() {
                     Some(selection) => {
-                        if direction == Direction::Left {
+                        if key == Qwerty::ArrowLeft {
                             selection.start
                         } else {
                             selection.end
@@ -790,20 +711,15 @@ impl TextArea {
                     },
                 };
 
-                cursor = cursor_next_word_line(&text_body, cursor, direction);
+                cursor = cursor_next_word_line(&text_body, cursor, next_word_line_op);
                 text_body.set_cursor(cursor.into());
                 text_body.clear_selection();
                 self.reset_cursor_blink();
             } else {
                 let amt = (self.theme.text_height * 1.2).round();
 
-                self.v_scroll_b.scroll(
-                    if direction == Direction::Up {
-                        -amt
-                    } else {
-                        amt
-                    },
-                );
+                self.v_scroll_b
+                    .scroll(if key == Qwerty::ArrowUp { -amt } else { amt });
             }
 
             return;
@@ -813,9 +729,10 @@ impl TextArea {
             Some(selection) => {
                 text_body.clear_selection();
 
-                text_body.set_cursor(match direction {
-                    Direction::Left | Direction::Up => selection.start.into(),
-                    Direction::Right | Direction::Down => selection.end.into(),
+                text_body.set_cursor(match key {
+                    Qwerty::ArrowLeft | Qwerty::ArrowUp => selection.start.into(),
+                    Qwerty::ArrowRight | Qwerty::ArrowDown => selection.end.into(),
+                    _ => unreachable!(),
                 });
             },
             None => {
@@ -836,7 +753,7 @@ impl TextArea {
         self.reset_cursor_blink();
     }
 
-    fn press_home<M>(self: &Arc<Self>, modifiers: M)
+    fn press_home_end<M>(self: &Arc<Self>, modifiers: M, key: Qwerty)
     where
         M: Into<Modifiers>,
     {
@@ -855,11 +772,23 @@ impl TextArea {
                     if !modifiers.alt() {
                         let sel_s = if modifiers.ctrl() {
                             match text_body.select_all() {
-                                Some(selection) => selection.start,
+                                Some(selection) => {
+                                    match key {
+                                        Qwerty::Home => selection.start,
+                                        Qwerty::End => selection.end,
+                                        _ => unreachable!(),
+                                    }
+                                },
                                 None => return,
                             }
                         } else {
-                            cursor_next_word_line(&text_body, cursor, Direction::Up)
+                            let word_line_op = match key {
+                                Qwerty::Home => NextWordLineOp::LineStart,
+                                Qwerty::End => NextWordLineOp::LineEnd,
+                                _ => unreachable!(),
+                            };
+
+                            cursor_next_word_line(&text_body, cursor, word_line_op)
                         };
 
                         text_body.set_selection(TextSelection::unordered(sel_s, cursor));
@@ -876,13 +805,25 @@ impl TextArea {
                 (selection.end, selection.start)
             };
 
+            let word_line_op = match key {
+                Qwerty::Home => NextWordLineOp::LineStart,
+                Qwerty::End => NextWordLineOp::LineEnd,
+                _ => unreachable!(),
+            };
+
             sel_e = if modifiers.ctrl() {
                 match text_body.select_all() {
-                    Some(selection) => selection.start,
+                    Some(selection) => {
+                        match key {
+                            Qwerty::Home => selection.start,
+                            Qwerty::End => selection.end,
+                            _ => unreachable!(),
+                        }
+                    },
                     None => return,
                 }
             } else {
-                cursor_next_word_line(&text_body, sel_e, Direction::Up)
+                cursor_next_word_line(&text_body, sel_e, word_line_op)
             };
 
             text_body.set_selection(TextSelection::unordered(sel_s, sel_e));
@@ -895,16 +836,33 @@ impl TextArea {
         } else {
             if let Some(selection) = text_body.selection() {
                 text_body.clear_selection();
-                text_body.set_cursor(selection.start.into());
+
+                let cursor = match key {
+                    Qwerty::Home => selection.start,
+                    Qwerty::End => selection.end,
+                    _ => unreachable!(),
+                };
+
+                text_body.set_cursor(cursor.into());
             }
 
             let cursor = if modifiers.ctrl() {
                 match text_body.select_all() {
-                    Some(selection) => selection.start.into(),
+                    Some(selection) => {
+                        match key {
+                            Qwerty::Home => selection.start.into(),
+                            Qwerty::End => selection.end.into(),
+                            _ => unreachable!(),
+                        }
+                    },
                     None => TextCursor::Empty,
                 }
             } else {
-                match text_body.cursor_line_start(text_body.cursor(), true) {
+                match match key {
+                    Qwerty::Home => text_body.cursor_line_start(text_body.cursor(), true),
+                    Qwerty::End => text_body.cursor_line_end(text_body.cursor(), true),
+                    _ => unreachable!(),
+                } {
                     TextCursor::None => TextCursor::Empty,
                     cursor => cursor,
                 }
@@ -922,53 +880,6 @@ impl TextArea {
         }
 
         self.reset_cursor_blink();
-    }
-
-    fn press_end<M>(self: &Arc<Self>, modifiers: M)
-    where
-        M: Into<Modifiers>,
-    {
-        let modifiers = modifiers.into();
-        let text_body = self.editor.text_body();
-
-        if modifiers.shift() {
-            if modifiers.ctrl() {
-                // Move selection end to end of body
-                // TODO:
-            } else {
-                // Move selection end to end of line
-                // TODO:
-            }
-        } else {
-            if let Some(selection) = text_body.selection() {
-                text_body.clear_selection();
-                text_body.set_cursor(selection.end.into());
-            }
-
-            let cursor = if modifiers.ctrl() {
-                match text_body.select_all() {
-                    Some(selection) => selection.end.into(),
-                    None => TextCursor::Empty,
-                }
-            } else {
-                match text_body.cursor_line_end(text_body.cursor(), true) {
-                    TextCursor::None => TextCursor::Empty,
-                    cursor => cursor,
-                }
-            };
-
-            text_body.set_cursor(cursor);
-
-            if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-                let text_area = self.clone();
-
-                text_body.bin_on_update(move |_, editor_bpu| {
-                    text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
-                });
-            }
-
-            self.reset_cursor_blink();
-        }
     }
 
     fn copy(self: &Arc<Self>) {
@@ -1141,16 +1052,23 @@ impl TextArea {
     }
 }
 
+enum NextWordLineOp {
+    WordStart,
+    WordEnd,
+    LineStart,
+    LineEnd,
+}
+
 fn cursor_next_word_line(
     text_body: &TextBodyGuard,
     cursor: PosTextCursor,
-    direction: Direction,
+    op: NextWordLineOp,
 ) -> PosTextCursor {
-    let edge = match match direction {
-        Direction::Left => text_body.cursor_word_start(cursor.into()),
-        Direction::Right => text_body.cursor_word_end(cursor.into()),
-        Direction::Up => text_body.cursor_line_start(cursor.into(), true),
-        Direction::Down => text_body.cursor_line_end(cursor.into(), true),
+    let edge = match match op {
+        NextWordLineOp::WordStart => text_body.cursor_word_start(cursor.into()),
+        NextWordLineOp::WordEnd => text_body.cursor_word_end(cursor.into()),
+        NextWordLineOp::LineStart => text_body.cursor_line_start(cursor.into(), true),
+        NextWordLineOp::LineEnd => text_body.cursor_line_end(cursor.into(), true),
     } {
         TextCursor::None | TextCursor::Empty => return cursor,
         TextCursor::Position(cursor) => cursor,
@@ -1160,19 +1078,21 @@ fn cursor_next_word_line(
         return edge;
     }
 
-    let next = match match direction {
-        Direction::Left | Direction::Up => text_body.cursor_prev(cursor.into()),
-        Direction::Right | Direction::Down => text_body.cursor_next(cursor.into()),
+    let next = match match op {
+        NextWordLineOp::WordStart | NextWordLineOp::LineStart => {
+            text_body.cursor_prev(cursor.into())
+        },
+        NextWordLineOp::WordEnd | NextWordLineOp::LineEnd => text_body.cursor_next(cursor.into()),
     } {
         TextCursor::None | TextCursor::Empty => return edge,
         TextCursor::Position(cursor) => cursor,
     };
 
-    match match direction {
-        Direction::Left => text_body.cursor_word_start(next.into()),
-        Direction::Right => text_body.cursor_word_end(next.into()),
-        Direction::Up => text_body.cursor_line_start(next.into(), true),
-        Direction::Down => text_body.cursor_line_end(next.into(), true),
+    match match op {
+        NextWordLineOp::WordStart => text_body.cursor_word_start(next.into()),
+        NextWordLineOp::WordEnd => text_body.cursor_word_end(next.into()),
+        NextWordLineOp::LineStart => text_body.cursor_line_start(next.into(), true),
+        NextWordLineOp::LineEnd => text_body.cursor_line_end(next.into(), true),
     } {
         TextCursor::None | TextCursor::Empty => next,
         TextCursor::Position(cursor) => cursor,
