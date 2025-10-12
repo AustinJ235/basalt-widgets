@@ -411,7 +411,7 @@ where
             let cb_text_area = text_area.clone();
 
             text_area.editor.on_press(key, move |_, window_state, _| {
-                cb_text_area.press_arrow_key(window_state, key);
+                cb_text_area.proc_movement_key(window_state, key);
                 Default::default()
             });
 
@@ -428,7 +428,7 @@ where
                 .delay(Some(Duration::from_millis(600)))
                 .interval(Duration::from_millis(40))
                 .call(move |_, _, _| {
-                    cb_text_area.press_arrow_key(&cb_modifiers, key);
+                    cb_text_area.proc_movement_key(&cb_modifiers, key);
                     Default::default()
                 })
                 .finish()
@@ -439,7 +439,7 @@ where
             let cb_text_area = text_area.clone();
 
             text_area.editor.on_press(key, move |_, window_state, _| {
-                cb_text_area.press_home_end(window_state, key);
+                cb_text_area.proc_movement_key(window_state, key);
                 Default::default()
             });
         }
@@ -607,268 +607,311 @@ impl TextArea {
             .pause(self.state.lock().c_blink_intvl_hid.borrow().unwrap());
     }
 
-    fn press_arrow_key<M>(self: &Arc<Self>, modifiers: M, key: Qwerty)
+    fn proc_movement_key<M>(self: &Arc<Self>, modifiers: M, key: Qwerty)
     where
         M: Into<Modifiers>,
     {
         let modifiers = modifiers.into();
         let text_body = self.editor.text_body();
 
-        let cursor_direction = |cursor: TextCursor| {
-            match key {
-                Qwerty::ArrowLeft => text_body.cursor_prev(cursor),
-                Qwerty::ArrowRight => text_body.cursor_next(cursor),
-                Qwerty::ArrowUp => text_body.cursor_up(cursor, true),
-                Qwerty::ArrowDown => text_body.cursor_down(cursor, true),
-                _ => unreachable!(),
-            }
-        };
-
-        let next_word_line_op = match key {
-            Qwerty::ArrowLeft => NextWordLineOp::WordStart,
-            Qwerty::ArrowRight => NextWordLineOp::WordEnd,
-            Qwerty::ArrowUp => NextWordLineOp::LineStart,
-            Qwerty::ArrowDown => NextWordLineOp::LineEnd,
-            _ => unreachable!(),
-        };
-
         if modifiers.shift() {
-            if matches!(key, Qwerty::ArrowUp | Qwerty::ArrowDown) && modifiers.ctrl() {
-                // TODO: duplicate line up/down?
+            if modifiers.ctrl() && matches!(key, Qwerty::ArrowUp | Qwerty::ArrowDown) {
                 return;
             }
 
-            let cursor = match text_body.cursor() {
-                TextCursor::None | TextCursor::Empty => return,
-                TextCursor::Position(cursor) => cursor,
-            };
+            match text_body.selection() {
+                Some(sel_exist) => {
+                    let cur_exist = match text_body.cursor() {
+                        TextCursor::None | TextCursor::Empty => {
+                            text_body.clear_selection();
+                            return;
+                        },
+                        TextCursor::Position(cursor) => cursor,
+                    };
 
-            let selection = match text_body.selection() {
-                Some(selection) => selection,
-                None => {
-                    if !modifiers.alt() {
-                        let sel_s = match if modifiers.ctrl() {
-                            match key {
-                                Qwerty::ArrowLeft => text_body.cursor_word_start(cursor.into()),
-                                Qwerty::ArrowRight => text_body.cursor_word_end(cursor.into()),
-                                _ => unreachable!(),
-                            }
+                    let (sel_start, sel_end) = if sel_exist.start == cur_exist {
+                        (sel_exist.end, sel_exist.start)
+                    } else if sel_exist.end == cur_exist {
+                        (sel_exist.start, sel_exist.end)
+                    } else {
+                        text_body.clear_selection();
+                        return;
+                    };
+
+                    let cur_move = if modifiers.alt() { sel_start } else { sel_end };
+
+                    let cur_next = if modifiers.ctrl() {
+                        let next_op = match key {
+                            Qwerty::ArrowLeft => Some(NextWordLineOp::WordStart),
+                            Qwerty::ArrowRight => Some(NextWordLineOp::WordEnd),
+                            Qwerty::Home | Qwerty::End => None,
+                            Qwerty::ArrowUp | Qwerty::ArrowDown => unreachable!(),
+                            _ => return,
+                        };
+
+                        match next_op {
+                            Some(next_op) => cursor_next_word_line(&text_body, cur_move, next_op),
+                            None => {
+                                let sel_all = match text_body.select_all() {
+                                    Some(selection) => selection,
+                                    None => {
+                                        text_body.clear_selection();
+                                        return;
+                                    },
+                                };
+
+                                match key {
+                                    Qwerty::Home => sel_all.start,
+                                    Qwerty::End => sel_all.end,
+                                    _ => unreachable!(),
+                                }
+                            },
+                        }
+                    } else {
+                        let next_op = match key {
+                            Qwerty::Home => Some(NextWordLineOp::LineStart),
+                            Qwerty::End => Some(NextWordLineOp::LineEnd),
+                            Qwerty::ArrowLeft
+                            | Qwerty::ArrowRight
+                            | Qwerty::ArrowUp
+                            | Qwerty::ArrowDown => None,
+                            _ => return,
+                        };
+
+                        match next_op {
+                            Some(next_op) => cursor_next_word_line(&text_body, cur_move, next_op),
+                            None => {
+                                match match key {
+                                    Qwerty::ArrowLeft => text_body.cursor_prev(cur_move.into()),
+                                    Qwerty::ArrowRight => text_body.cursor_next(cur_move.into()),
+                                    Qwerty::ArrowUp => text_body.cursor_up(cur_move.into(), true),
+                                    Qwerty::ArrowDown => {
+                                        text_body.cursor_down(cur_move.into(), true)
+                                    },
+                                    _ => unreachable!(),
+                                } {
+                                    TextCursor::None | TextCursor::Empty => return,
+                                    TextCursor::Position(cursor) => cursor,
+                                }
+                            },
+                        }
+                    };
+
+                    if text_body.are_cursors_equivalent(cur_move.into(), cur_next.into()) {
+                        return;
+                    }
+
+                    if modifiers.alt() {
+                        if text_body.are_cursors_equivalent(sel_end.into(), cur_next.into()) {
+                            text_body.clear_selection();
                         } else {
-                            cursor_direction(cursor.into())
+                            text_body.set_selection(TextSelection::unordered(sel_end, cur_next));
+                        }
+                    } else {
+                        if text_body.are_cursors_equivalent(sel_start.into(), cur_next.into()) {
+                            text_body.clear_selection();
+                            text_body.set_cursor(sel_start.into());
+                        } else {
+                            text_body.set_selection(TextSelection::unordered(sel_start, cur_next));
+                            text_body.set_cursor(cur_next.into());
+                        }
+                    }
+                },
+                None => {
+                    let sel_start = match text_body.cursor() {
+                        TextCursor::None => return,
+                        TextCursor::Empty => {
+                            match text_body.select_all() {
+                                Some(sel_all) => sel_all.start,
+                                None => return,
+                            }
+                        },
+                        TextCursor::Position(cursor) => cursor,
+                    };
+
+                    let sel_end = if modifiers.ctrl() {
+                        match key {
+                            Qwerty::ArrowLeft => {
+                                cursor_next_word_line(
+                                    &text_body,
+                                    sel_start,
+                                    NextWordLineOp::WordStart,
+                                )
+                            },
+                            Qwerty::ArrowRight => {
+                                cursor_next_word_line(
+                                    &text_body,
+                                    sel_start,
+                                    NextWordLineOp::WordEnd,
+                                )
+                            },
+                            Qwerty::Home => {
+                                match text_body.select_all() {
+                                    Some(sel_all) => sel_all.start,
+                                    None => return,
+                                }
+                            },
+                            Qwerty::End => {
+                                match text_body.select_all() {
+                                    Some(sel_all) => sel_all.end,
+                                    None => return,
+                                }
+                            },
+                            Qwerty::ArrowUp | Qwerty::ArrowDown => unreachable!(),
+                            _ => return,
+                        }
+                    } else {
+                        match match key {
+                            Qwerty::ArrowLeft => text_body.cursor_prev(sel_start.into()),
+                            Qwerty::ArrowRight => text_body.cursor_next(sel_start.into()),
+                            Qwerty::ArrowUp => text_body.cursor_up(sel_start.into(), true),
+                            Qwerty::ArrowDown => text_body.cursor_down(sel_start.into(), true),
+                            Qwerty::Home => text_body.cursor_line_start(sel_start.into(), true),
+                            Qwerty::End => text_body.cursor_line_end(sel_start.into(), true),
+                            _ => return,
                         } {
                             TextCursor::None | TextCursor::Empty => return,
                             TextCursor::Position(cursor) => cursor,
-                        };
+                        }
+                    };
 
-                        text_body.set_selection(TextSelection::unordered(sel_s, cursor));
-                        text_body.set_cursor(sel_s.into());
+                    if text_body.are_cursors_equivalent(sel_start.into(), sel_end.into()) {
+                        return;
                     }
 
-                    return;
+                    text_body.set_cursor(sel_end.into());
+                    text_body.set_selection(TextSelection::unordered(sel_start, sel_end));
                 },
-            };
-
-            let (sel_s, mut sel_e) = if modifiers.alt() == (selection.start == cursor) {
-                (selection.start, selection.end)
-            } else {
-                (selection.end, selection.start)
-            };
-
-            sel_e = if modifiers.ctrl() {
-                cursor_next_word_line(&text_body, sel_e, next_word_line_op)
-            } else {
-                match cursor_direction(sel_e.into()) {
-                    TextCursor::None | TextCursor::Empty => return,
-                    TextCursor::Position(cursor) => cursor,
-                }
-            };
-
-            text_body.set_selection(TextSelection::unordered(sel_s, sel_e));
-
-            if modifiers.alt() {
-                text_body.set_cursor(sel_s.into());
-            } else {
-                text_body.set_cursor(sel_e.into())
             }
-
-            self.reset_cursor_blink();
-            return;
         } else if modifiers.ctrl() {
-            if matches!(key, Qwerty::ArrowLeft | Qwerty::ArrowRight) {
-                let mut cursor = match text_body.selection() {
-                    Some(selection) => {
-                        if key == Qwerty::ArrowLeft {
-                            selection.start
-                        } else {
-                            selection.end
-                        }
-                    },
-                    None => {
-                        match text_body.cursor() {
-                            TextCursor::None | TextCursor::Empty => return,
-                            TextCursor::Position(cursor) => cursor,
-                        }
-                    },
-                };
-
-                cursor = cursor_next_word_line(&text_body, cursor, next_word_line_op);
-                text_body.set_cursor(cursor.into());
-                text_body.clear_selection();
-                self.reset_cursor_blink();
-            } else {
-                let amt = (self.theme.text_height * 1.2).round();
-
-                self.v_scroll_b
-                    .scroll(if key == Qwerty::ArrowUp { -amt } else { amt });
-            }
-
-            return;
-        }
-
-        match text_body.selection() {
-            Some(selection) => {
-                text_body.clear_selection();
-
-                text_body.set_cursor(match key {
-                    Qwerty::ArrowLeft | Qwerty::ArrowUp => selection.start.into(),
-                    Qwerty::ArrowRight | Qwerty::ArrowDown => selection.end.into(),
-                    _ => unreachable!(),
-                });
-            },
-            None => {
-                if let TextCursor::Position(cursor) = cursor_direction(text_body.cursor()) {
-                    text_body.set_cursor(cursor.into());
-                }
-            },
-        }
-
-        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-            let text_area = self.clone();
-
-            text_body.bin_on_update(move |_, editor_bpu| {
-                text_area.check_cursor_in_view(editor_bpu, cursor_bounds);
-            });
-        }
-
-        self.reset_cursor_blink();
-    }
-
-    fn press_home_end<M>(self: &Arc<Self>, modifiers: M, key: Qwerty)
-    where
-        M: Into<Modifiers>,
-    {
-        let modifiers = modifiers.into();
-        let text_body = self.editor.text_body();
-
-        if modifiers.shift() {
-            let cursor = match text_body.cursor() {
-                TextCursor::None | TextCursor::Empty => return,
-                TextCursor::Position(cursor) => cursor,
-            };
-
-            let selection = match text_body.selection() {
-                Some(selection) => selection,
-                None => {
-                    if !modifiers.alt() {
-                        let sel_s = if modifiers.ctrl() {
+            match text_body.selection() {
+                Some(selection) => {
+                    let cursor = match key {
+                        Qwerty::ArrowLeft => selection.start,
+                        Qwerty::ArrowRight => selection.end,
+                        Qwerty::ArrowUp => {
+                            match text_body.cursor_up(selection.start.into(), true) {
+                                TextCursor::None | TextCursor::Empty => selection.start,
+                                TextCursor::Position(cursor) => cursor,
+                            }
+                        },
+                        Qwerty::ArrowDown => {
+                            match text_body.cursor_down(selection.end.into(), true) {
+                                TextCursor::None | TextCursor::Empty => selection.end,
+                                TextCursor::Position(cursor) => cursor,
+                            }
+                        },
+                        Qwerty::Home => {
                             match text_body.select_all() {
-                                Some(selection) => {
-                                    match key {
-                                        Qwerty::Home => selection.start,
-                                        Qwerty::End => selection.end,
-                                        _ => unreachable!(),
+                                Some(sel_all) => sel_all.start,
+                                None => return,
+                            }
+                        },
+                        Qwerty::End => {
+                            match text_body.select_all() {
+                                Some(sel_all) => sel_all.end,
+                                None => return,
+                            }
+                        },
+                        _ => unreachable!(),
+                    };
+
+                    text_body.set_cursor(cursor.into());
+                    text_body.clear_selection();
+                },
+                None => {
+                    match key {
+                        Qwerty::ArrowLeft | Qwerty::ArrowRight => {
+                            match text_body.cursor() {
+                                TextCursor::None => return,
+                                TextCursor::Empty => {
+                                    match text_body.select_all() {
+                                        Some(sel_all) => {
+                                            text_body.set_cursor(sel_all.start.into());
+                                        },
+                                        None => return,
                                     }
+                                },
+                                TextCursor::Position(cursor) => {
+                                    let cursor_next = cursor_next_word_line(
+                                        &text_body,
+                                        cursor,
+                                        if key == Qwerty::ArrowLeft {
+                                            NextWordLineOp::WordStart
+                                        } else {
+                                            NextWordLineOp::WordEnd
+                                        },
+                                    );
+
+                                    if text_body
+                                        .are_cursors_equivalent(cursor.into(), cursor_next.into())
+                                    {
+                                        return;
+                                    }
+
+                                    text_body.set_cursor(cursor_next.into());
+                                },
+                            }
+                        },
+                        Qwerty::ArrowUp | Qwerty::ArrowDown => {
+                            let line_height = (self.theme.text_height * 1.2).round();
+                            self.v_scroll_b.scroll(
+                                if key == Qwerty::ArrowUp {
+                                    -line_height
+                                } else {
+                                    line_height
+                                },
+                            );
+                        },
+                        Qwerty::Home => {
+                            match text_body.select_all() {
+                                Some(sel_all) => {
+                                    text_body.set_cursor(sel_all.start.into());
                                 },
                                 None => return,
                             }
-                        } else {
-                            let word_line_op = match key {
-                                Qwerty::Home => NextWordLineOp::LineStart,
-                                Qwerty::End => NextWordLineOp::LineEnd,
-                                _ => unreachable!(),
-                            };
-
-                            cursor_next_word_line(&text_body, cursor, word_line_op)
-                        };
-
-                        text_body.set_selection(TextSelection::unordered(sel_s, cursor));
-                        text_body.set_cursor(sel_s.into());
+                        },
+                        Qwerty::End => {
+                            match text_body.select_all() {
+                                Some(sel_all) => {
+                                    text_body.set_cursor(sel_all.end.into());
+                                },
+                                None => return,
+                            }
+                        },
+                        _ => return,
                     }
-
-                    return;
                 },
-            };
-
-            let (sel_s, mut sel_e) = if modifiers.alt() == (selection.start == cursor) {
-                (selection.start, selection.end)
-            } else {
-                (selection.end, selection.start)
-            };
-
-            let word_line_op = match key {
-                Qwerty::Home => NextWordLineOp::LineStart,
-                Qwerty::End => NextWordLineOp::LineEnd,
-                _ => unreachable!(),
-            };
-
-            sel_e = if modifiers.ctrl() {
-                match text_body.select_all() {
-                    Some(selection) => {
-                        match key {
-                            Qwerty::Home => selection.start,
-                            Qwerty::End => selection.end,
-                            _ => unreachable!(),
-                        }
-                    },
-                    None => return,
-                }
-            } else {
-                cursor_next_word_line(&text_body, sel_e, word_line_op)
-            };
-
-            text_body.set_selection(TextSelection::unordered(sel_s, sel_e));
-
-            if modifiers.alt() {
-                text_body.set_cursor(sel_s.into());
-            } else {
-                text_body.set_cursor(sel_e.into())
             }
         } else {
-            if let Some(selection) = text_body.selection() {
-                text_body.clear_selection();
+            match text_body.selection() {
+                Some(selection) => {
+                    let cursor = match key {
+                        Qwerty::ArrowLeft | Qwerty::ArrowUp | Qwerty::Home => selection.start,
+                        Qwerty::ArrowRight | Qwerty::ArrowDown | Qwerty::End => selection.end,
+                        _ => return,
+                    };
 
-                let cursor = match key {
-                    Qwerty::Home => selection.start,
-                    Qwerty::End => selection.end,
-                    _ => unreachable!(),
-                };
+                    text_body.set_cursor(cursor.into());
+                    text_body.clear_selection();
+                },
+                None => {
+                    let cursor = match match key {
+                        Qwerty::ArrowLeft => text_body.cursor_prev(text_body.cursor()),
+                        Qwerty::ArrowRight => text_body.cursor_next(text_body.cursor()),
+                        Qwerty::ArrowUp => text_body.cursor_up(text_body.cursor(), true),
+                        Qwerty::ArrowDown => text_body.cursor_down(text_body.cursor(), true),
+                        Qwerty::Home => text_body.cursor_line_start(text_body.cursor(), true),
+                        Qwerty::End => text_body.cursor_line_end(text_body.cursor(), true),
+                        _ => return,
+                    } {
+                        TextCursor::None | TextCursor::Empty => return,
+                        position => position,
+                    };
 
-                text_body.set_cursor(cursor.into());
+                    text_body.set_cursor(cursor);
+                },
             }
-
-            let cursor = if modifiers.ctrl() {
-                match text_body.select_all() {
-                    Some(selection) => {
-                        match key {
-                            Qwerty::Home => selection.start.into(),
-                            Qwerty::End => selection.end.into(),
-                            _ => unreachable!(),
-                        }
-                    },
-                    None => TextCursor::Empty,
-                }
-            } else {
-                match match key {
-                    Qwerty::Home => text_body.cursor_line_start(text_body.cursor(), true),
-                    Qwerty::End => text_body.cursor_line_end(text_body.cursor(), true),
-                    _ => unreachable!(),
-                } {
-                    TextCursor::None => TextCursor::Empty,
-                    cursor => cursor,
-                }
-            };
-
-            text_body.set_cursor(cursor);
         }
 
         if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
