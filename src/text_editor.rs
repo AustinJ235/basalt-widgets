@@ -407,6 +407,8 @@ where
             Qwerty::ArrowRight,
             Qwerty::ArrowUp,
             Qwerty::ArrowDown,
+            Qwerty::PageUp,
+            Qwerty::PageDown,
         ] {
             let cb_text_editor = text_editor.clone();
 
@@ -435,7 +437,7 @@ where
                 .unwrap();
         }
 
-        for key in [Qwerty::Home, Qwerty::End, Qwerty::PageUp, Qwerty::PageDown] {
+        for key in [Qwerty::Home, Qwerty::End] {
             let cb_text_editor = text_editor.clone();
 
             text_editor.editor.on_press(key, move |_, window_state, _| {
