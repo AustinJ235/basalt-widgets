@@ -435,7 +435,7 @@ where
                 .unwrap();
         }
 
-        for key in [Qwerty::Home, Qwerty::End] {
+        for key in [Qwerty::Home, Qwerty::End, Qwerty::PageUp, Qwerty::PageDown] {
             let cb_text_editor = text_editor.clone();
 
             text_editor.editor.on_press(key, move |_, window_state, _| {
@@ -615,7 +615,12 @@ impl TextEditor {
         let text_body = self.editor.text_body();
 
         if modifiers.shift() {
-            if modifiers.ctrl() && matches!(key, Qwerty::ArrowUp | Qwerty::ArrowDown) {
+            if modifiers.ctrl()
+                && matches!(
+                    key,
+                    Qwerty::ArrowUp | Qwerty::ArrowDown | Qwerty::PageUp | Qwerty::PageDown
+                )
+            {
                 return;
             }
 
@@ -645,7 +650,10 @@ impl TextEditor {
                             Qwerty::ArrowLeft => Some(NextWordLineOp::WordStart),
                             Qwerty::ArrowRight => Some(NextWordLineOp::WordEnd),
                             Qwerty::Home | Qwerty::End => None,
-                            Qwerty::ArrowUp | Qwerty::ArrowDown => unreachable!(),
+                            Qwerty::ArrowUp
+                            | Qwerty::ArrowDown
+                            | Qwerty::PageUp
+                            | Qwerty::PageDown => unreachable!(),
                             _ => return,
                         };
 
@@ -674,7 +682,9 @@ impl TextEditor {
                             Qwerty::ArrowLeft
                             | Qwerty::ArrowRight
                             | Qwerty::ArrowUp
-                            | Qwerty::ArrowDown => None,
+                            | Qwerty::ArrowDown
+                            | Qwerty::PageUp
+                            | Qwerty::PageDown => None,
                             _ => return,
                         };
 
@@ -687,6 +697,20 @@ impl TextEditor {
                                     Qwerty::ArrowUp => text_body.cursor_up(cur_move.into(), true),
                                     Qwerty::ArrowDown => {
                                         text_body.cursor_down(cur_move.into(), true)
+                                    },
+                                    Qwerty::PageUp => {
+                                        text_body.cursor_line_offset(
+                                            cur_move.into(),
+                                            -self.page_lines(),
+                                            true,
+                                        )
+                                    },
+                                    Qwerty::PageDown => {
+                                        text_body.cursor_line_offset(
+                                            cur_move.into(),
+                                            self.page_lines(),
+                                            true,
+                                        )
                                     },
                                     _ => unreachable!(),
                                 } {
@@ -757,7 +781,10 @@ impl TextEditor {
                                     None => return,
                                 }
                             },
-                            Qwerty::ArrowUp | Qwerty::ArrowDown => unreachable!(),
+                            Qwerty::ArrowUp
+                            | Qwerty::ArrowDown
+                            | Qwerty::PageUp
+                            | Qwerty::PageDown => unreachable!(),
                             _ => return,
                         }
                     } else {
@@ -768,6 +795,20 @@ impl TextEditor {
                             Qwerty::ArrowDown => text_body.cursor_down(sel_start.into(), true),
                             Qwerty::Home => text_body.cursor_line_start(sel_start.into(), true),
                             Qwerty::End => text_body.cursor_line_end(sel_start.into(), true),
+                            Qwerty::PageUp => {
+                                text_body.cursor_line_offset(
+                                    sel_start.into(),
+                                    -self.page_lines(),
+                                    true,
+                                )
+                            },
+                            Qwerty::PageDown => {
+                                text_body.cursor_line_offset(
+                                    sel_start.into(),
+                                    self.page_lines(),
+                                    true,
+                                )
+                            },
                             _ => return,
                         } {
                             TextCursor::None | TextCursor::Empty => return,
@@ -784,6 +825,10 @@ impl TextEditor {
                 },
             }
         } else if modifiers.ctrl() {
+            if matches!(key, Qwerty::PageUp | Qwerty::PageDown) {
+                return;
+            }
+
             match text_body.selection() {
                 Some(selection) => {
                     let cursor = match key {
@@ -813,7 +858,8 @@ impl TextEditor {
                                 None => return,
                             }
                         },
-                        _ => unreachable!(),
+                        Qwerty::PageUp | Qwerty::PageDown => unreachable!(),
+                        _ => return,
                     };
 
                     text_body.set_cursor(cursor.into());
@@ -855,6 +901,7 @@ impl TextEditor {
                         },
                         Qwerty::ArrowUp | Qwerty::ArrowDown => {
                             let line_height = (self.theme.text_height * 1.2).round();
+
                             self.v_scroll_b.scroll(
                                 if key == Qwerty::ArrowUp {
                                     -line_height
@@ -879,6 +926,7 @@ impl TextEditor {
                                 None => return,
                             }
                         },
+                        Qwerty::PageUp | Qwerty::PageDown => unreachable!(),
                         _ => return,
                     }
                 },
@@ -887,8 +935,52 @@ impl TextEditor {
             match text_body.selection() {
                 Some(selection) => {
                     let cursor = match key {
-                        Qwerty::ArrowLeft | Qwerty::ArrowUp | Qwerty::Home => selection.start,
-                        Qwerty::ArrowRight | Qwerty::ArrowDown | Qwerty::End => selection.end,
+                        Qwerty::ArrowLeft => selection.start,
+                        Qwerty::ArrowRight => selection.end,
+                        Qwerty::ArrowUp => {
+                            match text_body.cursor_up(selection.start.into(), true) {
+                                TextCursor::None | TextCursor::Empty => selection.start,
+                                TextCursor::Position(cursor) => cursor,
+                            }
+                        },
+                        Qwerty::ArrowDown => {
+                            match text_body.cursor_down(selection.end.into(), true) {
+                                TextCursor::None | TextCursor::Empty => selection.end,
+                                TextCursor::Position(cursor) => cursor,
+                            }
+                        },
+                        Qwerty::Home => {
+                            match text_body.cursor_line_start(selection.start.into(), true) {
+                                TextCursor::None | TextCursor::Empty => selection.start,
+                                TextCursor::Position(cursor) => cursor,
+                            }
+                        },
+                        Qwerty::End => {
+                            match text_body.cursor_line_end(selection.end.into(), true) {
+                                TextCursor::None | TextCursor::Empty => selection.end,
+                                TextCursor::Position(cursor) => cursor,
+                            }
+                        },
+                        Qwerty::PageUp => {
+                            match text_body.cursor_line_offset(
+                                selection.start.into(),
+                                -self.page_lines(),
+                                true,
+                            ) {
+                                TextCursor::None | TextCursor::Empty => selection.start,
+                                TextCursor::Position(cursor) => cursor,
+                            }
+                        },
+                        Qwerty::PageDown => {
+                            match text_body.cursor_line_offset(
+                                selection.end.into(),
+                                self.page_lines(),
+                                true,
+                            ) {
+                                TextCursor::None | TextCursor::Empty => selection.end,
+                                TextCursor::Position(cursor) => cursor,
+                            }
+                        },
                         _ => return,
                     };
 
@@ -903,6 +995,20 @@ impl TextEditor {
                         Qwerty::ArrowDown => text_body.cursor_down(text_body.cursor(), true),
                         Qwerty::Home => text_body.cursor_line_start(text_body.cursor(), true),
                         Qwerty::End => text_body.cursor_line_end(text_body.cursor(), true),
+                        Qwerty::PageUp => {
+                            text_body.cursor_line_offset(
+                                text_body.cursor(),
+                                -self.page_lines(),
+                                true,
+                            )
+                        },
+                        Qwerty::PageDown => {
+                            text_body.cursor_line_offset(
+                                text_body.cursor(),
+                                self.page_lines(),
+                                true,
+                            )
+                        },
                         _ => return,
                     } {
                         TextCursor::None | TextCursor::Empty => return,
@@ -984,6 +1090,13 @@ impl TextEditor {
         if let Some(selection) = text_body.select_all() {
             text_body.set_selection(selection);
         }
+    }
+
+    fn page_lines(&self) -> isize {
+        let editor_bpu = self.editor.post_update();
+        let body_height = editor_bpu.optimal_inner_bounds[3] - editor_bpu.optimal_inner_bounds[2];
+        let line_height = (self.theme.text_height * 1.2).round();
+        (body_height / line_height).max(1.0).floor() as isize
     }
 
     fn check_cursor_in_view(&self, editor_bpu: &BinPostUpdate, mut cursor_bounds: [f32; 4]) {
