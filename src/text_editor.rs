@@ -484,69 +484,8 @@ where
 
         let cb_text_editor = text_editor.clone();
 
-        text_editor.editor.on_character(move |_, window, mut c| {
-            let modifiers = Modifiers::from(window);
-
-            if (!c.is_backspace() && modifiers.ctrl()) || modifiers.alt() {
-                return Default::default();
-            }
-
-            let text_body = cb_text_editor.editor.text_body();
-            let mut selection_deleted = false;
-
-            if let Some(selection) = text_body.selection() {
-                text_body.clear_selection();
-                text_body.set_cursor(text_body.selection_delete(selection));
-                selection_deleted = true;
-            }
-
-            if c.is_backspace() {
-                if !selection_deleted {
-                    if modifiers.ctrl() {
-                        let delete_end = match text_body.cursor() {
-                            TextCursor::None | TextCursor::Empty => return Default::default(),
-                            TextCursor::Position(cursor) => cursor,
-                        };
-
-                        let delete_start = cursor_next_word_line(
-                            &text_body,
-                            delete_end,
-                            if modifiers.shift() {
-                                NextWordLineOp::LineStart
-                            } else {
-                                NextWordLineOp::WordStart
-                            },
-                        );
-
-                        if delete_end == delete_start {
-                            return Default::default();
-                        }
-
-                        text_body.set_cursor(text_body.selection_delete(TextSelection {
-                            start: delete_start,
-                            end: delete_end,
-                        }));
-                    } else {
-                        text_body.set_cursor(text_body.cursor_delete(text_body.cursor()));
-                    }
-                }
-            } else {
-                if c.0 == '\r' {
-                    c.0 = '\n';
-                }
-
-                text_body.set_cursor(text_body.cursor_insert(text_body.cursor(), *c));
-            }
-
-            if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-                let cb_text_editor2 = cb_text_editor.clone();
-
-                text_body.bin_on_update(move |_, editor_bpu| {
-                    cb_text_editor2.check_cursor_in_view(editor_bpu, cursor_bounds);
-                });
-            }
-
-            cb_text_editor.reset_cursor_blink();
+        text_editor.editor.on_character(move |_, window_state, c| {
+            cb_text_editor.proc_character(window_state, c.0);
             Default::default()
         });
 
@@ -607,6 +546,90 @@ impl TextEditor {
             .basalt_ref()
             .interval_ref()
             .pause(self.state.lock().c_blink_intvl_hid.borrow().unwrap());
+    }
+
+    fn proc_character<M>(self: &Arc<Self>, modifiers: M, c: char)
+    where
+        M: Into<Modifiers>,
+    {
+        let modifiers = modifiers.into();
+        let text_body = self.editor.text_body();
+
+        if modifiers.alt() || (!matches!(c, '\u{007F}' | '\x08') && modifiers.ctrl()) {
+            return;
+        }
+
+        let sel_deleted = match text_body.selection() {
+            Some(selection) => {
+                text_body.set_cursor(text_body.selection_delete(selection));
+                text_body.clear_selection();
+                true
+            },
+            None => false,
+        };
+
+        match c {
+            '\u{007F}' | '\x08' => {
+                if !sel_deleted {
+                    let mut cursor = match text_body.cursor() {
+                        TextCursor::None | TextCursor::Empty => return Default::default(),
+                        TextCursor::Position(cursor) => cursor,
+                    };
+
+                    if modifiers.ctrl() {
+                        let op = if c == '\u{007F}' {
+                            if modifiers.shift() {
+                                NextWordLineOp::LineEnd
+                            } else {
+                                NextWordLineOp::WordEnd
+                            }
+                        } else {
+                            if modifiers.shift() {
+                                NextWordLineOp::LineStart
+                            } else {
+                                NextWordLineOp::WordStart
+                            }
+                        };
+
+                        let del_to = cursor_next_word_line(&text_body, cursor, op);
+
+                        if text_body.are_cursors_equivalent(cursor.into(), del_to.into()) {
+                            return Default::default();
+                        }
+
+                        text_body.set_cursor(
+                            text_body.selection_delete(TextSelection::unordered(cursor, del_to)),
+                        );
+                    } else {
+                        if c == '\u{007F}' {
+                            cursor = match text_body.cursor_next(cursor.into()) {
+                                TextCursor::None | TextCursor::Empty => return Default::default(),
+                                TextCursor::Position(cursor) => cursor,
+                            };
+                        }
+
+                        text_body.set_cursor(text_body.cursor_delete(cursor.into()));
+                    }
+                }
+            },
+            mut c => {
+                if c == '\r' {
+                    c = '\n';
+                }
+
+                text_body.set_cursor(text_body.cursor_insert(text_body.cursor(), c));
+            },
+        }
+
+        if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
+            let cb_text_editor = self.clone();
+
+            text_body.bin_on_update(move |_, editor_bpu| {
+                cb_text_editor.check_cursor_in_view(editor_bpu, cursor_bounds);
+            });
+        }
+
+        self.reset_cursor_blink();
     }
 
     fn proc_movement_key<M>(self: &Arc<Self>, modifiers: M, key: Qwerty)
@@ -1038,6 +1061,7 @@ impl TextEditor {
 
         if let Some(selection) = text_body.selection() {
             *self.state.lock().clipboard.borrow_mut() = text_body.selection_string(selection);
+            println!("'{:?}'", self.state.lock().clipboard.borrow().bytes());
         }
     }
 
