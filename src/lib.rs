@@ -18,6 +18,7 @@ mod select;
 mod spin_button;
 mod switch_button;
 mod text_editor;
+mod text_hooks;
 mod theme;
 mod toggle_button;
 
