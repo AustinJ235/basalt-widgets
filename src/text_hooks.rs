@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign};
 use std::sync::Arc;
 use std::sync::atomic::{self, AtomicU8};
