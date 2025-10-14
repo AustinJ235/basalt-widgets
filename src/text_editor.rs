@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{Bin, BinPostUpdate, BinStyle, Position, TextAttrs, TextBody, TextSpan};
+use basalt::interface::TextCursor;
+use basalt::interface::TextBodyGuard;
 
 use crate::builder::WidgetBuilder;
 use crate::{ScrollAxis, ScrollBar, Theme, WidgetContainer, WidgetPlacement, text_hooks, ulps_eq};
@@ -144,7 +146,7 @@ where
     }
 }
 
-/// TextEditor widget.
+/// Text editor widget.
 pub struct TextEditor {
     theme: Theme,
     props: Properties,
@@ -155,6 +157,28 @@ pub struct TextEditor {
 }
 
 impl TextEditor {
+    /// Obtain the value as a [`String`](String).
+    pub fn value(&self) -> String {
+        let text_body = self.editor.text_body();
+        
+        match text_body.select_all() {
+            Some(selection) => text_body.selection_string(selection),
+            None => String::new()
+        }
+    }
+
+    /// Set the value.
+    pub fn set_value<V>(&self, value: V)
+    where
+        V: Into<String>
+    {
+        self.editor.style_modify(|style| {
+            style.text_body.spans = vec![TextSpan::from(value.into())];
+            style.text_body.cursor = TextCursor::None;
+            style.text_body.selection = None;
+        });
+    }
+
     /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
     pub fn default_placement(theme: &Theme) -> WidgetPlacement {
         let height = theme.spacing + (theme.base_size * 5.0);
