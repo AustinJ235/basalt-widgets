@@ -14,7 +14,7 @@ use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
 use crate::button::{BtnHookColors, button_hooks};
-use crate::{Theme, WidgetContainer, WidgetPlacement};
+use crate::{Theme, WidgetContainer, WidgetPlacement, ulps_eq};
 
 /// Determintes the orientation and axis of the [`ScrollBar`].
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -226,6 +226,7 @@ where
                 target: RefCell::new(TargetState {
                     overflow: scroll,
                     scroll,
+                    size: 0.0,
                 }),
                 smooth: RefCell::new(SmoothState {
                     run: false,
@@ -457,6 +458,7 @@ struct State {
 struct TargetState {
     overflow: f32,
     scroll: f32,
+    size: f32,
 }
 
 struct SmoothState {
@@ -492,8 +494,11 @@ impl ScrollBar {
         smooth_state.target = if !smooth_state.run {
             target_state.scroll + amt
         } else {
-            let direction_changes =
-                (smooth_state.target - target_state.scroll).signum() != amt.signum();
+            let direction_changes = !ulps_eq(
+                (smooth_state.target - target_state.scroll).signum(),
+                amt.signum(),
+                4,
+            );
 
             if self.props.accel {
                 if direction_changes {
@@ -515,7 +520,7 @@ impl ScrollBar {
             }
         };
 
-        if smooth_state.target == target_state.scroll {
+        if ulps_eq(smooth_state.target, target_state.scroll, 4) {
             return;
         }
 
@@ -542,19 +547,21 @@ impl ScrollBar {
         let target_state = state.target.borrow();
         let mut smooth_state = state.smooth.borrow_mut();
 
-        if target_state.scroll == to {
+        if ulps_eq(target_state.scroll, to, 4) {
             smooth_state.run = false;
             return;
         }
 
-        if !smooth_state.run {
-            smooth_state.run = true;
-            self.run_smooth_scroll();
-        }
+        if !ulps_eq(smooth_state.target, to, 4) {
+            if !smooth_state.run {
+                smooth_state.run = true;
+                self.run_smooth_scroll();
+            }
 
-        smooth_state.start = target_state.scroll;
-        smooth_state.target = to;
-        smooth_state.time = 0.0;
+            smooth_state.start = target_state.scroll;
+            smooth_state.target = to;
+            smooth_state.time = 0.0;
+        }
     }
 
     /// Scroll to the minimum.
@@ -585,7 +592,7 @@ impl ScrollBar {
             let mut target_state = state.target.borrow_mut();
 
             if amt.is_sign_negative() {
-                if target_state.scroll != 0.0 {
+                if !ulps_eq(target_state.scroll, 0.0, 4) {
                     if target_state.scroll + amt < 0.0 {
                         target_state.scroll = 0.0;
                     } else {
@@ -595,7 +602,7 @@ impl ScrollBar {
                     update = true;
                 }
             } else {
-                if target_state.scroll != target_state.overflow {
+                if !ulps_eq(target_state.scroll, target_state.overflow, 4) {
                     if target_state.scroll + amt > target_state.overflow {
                         target_state.scroll = target_state.overflow;
                     } else {
@@ -640,17 +647,17 @@ impl ScrollBar {
             }
 
             if to > target_state.overflow {
-                if target_state.scroll != target_state.overflow {
+                if !ulps_eq(target_state.scroll, target_state.overflow, 4) {
                     target_state.scroll = target_state.overflow;
                     update = true;
                 }
             } else if to < 0.0 {
-                if target_state.scroll != 0.0 {
+                if !ulps_eq(target_state.scroll, 0.0, 4) {
                     target_state.scroll = 0.0;
                     update = true;
                 }
             } else {
-                if target_state.scroll != to {
+                if !ulps_eq(target_state.scroll, to, 4) {
                     target_state.scroll = to;
                     update = true;
                 }
@@ -675,7 +682,7 @@ impl ScrollBar {
             let mut target_state = state.target.borrow_mut();
             state.smooth.borrow_mut().run = false;
 
-            if target_state.scroll != 0.0 {
+            if !ulps_eq(target_state.scroll, 0.0, 4) {
                 target_state.scroll = 0.0;
                 update = true;
             }
@@ -699,7 +706,7 @@ impl ScrollBar {
             let mut target_state = state.target.borrow_mut();
             state.smooth.borrow_mut().run = false;
 
-            if target_state.scroll != target_state.overflow {
+            if !ulps_eq(target_state.scroll, target_state.overflow, 4) {
                 target_state.scroll = target_state.overflow;
                 update = true;
             }
@@ -721,7 +728,17 @@ impl ScrollBar {
         }
     }
 
-    /// The amount of overflow the target has.
+    /// The inner size of the target on the axis that is controlled.
+    pub fn target_size(&self) -> f32 {
+        let target_bpu = self.props.target.post_update();
+
+        match self.props.axis {
+            ScrollAxis::X => target_bpu.tri[0] - target_bpu.tli[0],
+            ScrollAxis::Y => target_bpu.bli[1] - target_bpu.tli[1],
+        }
+    }
+
+    /// The amount of overflow of the target on the axis that is controlled.
     pub fn target_overflow(&self) -> f32 {
         match self.props.axis {
             ScrollAxis::X => self.props.target.calc_hori_overflow(),
@@ -743,7 +760,7 @@ impl ScrollBar {
         let state = self.state.lock();
         let smooth_state = state.smooth.borrow();
 
-        if !smooth_state.run {
+        if smooth_state.run {
             return smooth_state.target;
         }
 
@@ -764,18 +781,24 @@ impl ScrollBar {
     }
 
     fn check_target_state(&self) -> bool {
-        let state = self.state.lock();
         let target_overflow = self.target_overflow();
+        let target_size = self.target_size();
+        let state = self.state.try_lock_for(Duration::from_secs(5)).unwrap();
         let mut target_state = state.target.borrow_mut();
         let mut update = false;
 
-        if target_state.overflow != target_overflow {
+        if !ulps_eq(target_state.overflow, target_overflow, 4) {
             target_state.overflow = target_overflow;
             update = true;
         }
 
         if target_overflow < target_state.scroll {
             target_state.scroll = target_overflow;
+            update = true;
+        }
+
+        if !ulps_eq(target_state.size, target_size, 4) {
+            target_state.size = target_size;
             update = true;
         }
 
@@ -819,36 +842,53 @@ impl ScrollBar {
             ScrollAxis::Y => confine_bpu.bli[1] - confine_bpu.tli[1],
         };
 
-        let space_size =
-            (target_state.overflow / self.props.step).min(confine_size - self.theme.base_size);
+        let confine_sec_size = match self.props.axis {
+            ScrollAxis::X => confine_bpu.bli[1] - confine_bpu.tli[1],
+            ScrollAxis::Y => confine_bpu.tri[0] - confine_bpu.tli[0],
+        };
 
-        let scroll_per_px = target_state.overflow / space_size;
+        let [scroll_per_px, bar_size_pct, bar_offset_pct] =
+            if target_state.overflow > 0.0 && target_state.size > 0.0 {
+                let overflow_ratio = target_state.overflow / target_state.size;
+                let max_space_size = confine_size - confine_sec_size;
+
+                let space_size = ((-1.0 / ((0.25 * overflow_ratio) + 0.5) + 2.0)
+                    * (max_space_size / 2.0))
+                    .clamp(0.0, max_space_size);
+
+                let scroll_per_px = target_state.overflow / space_size;
+                let bar_size_pct = ((confine_size - space_size) / confine_size) * 100.0;
+                let bar_offset_pct = ((target_state.scroll / scroll_per_px) / confine_size) * 100.0;
+
+                [scroll_per_px, bar_size_pct, bar_offset_pct]
+            } else {
+                [0.0, 100.0, 0.0]
+            };
+
         state.drag.borrow_mut().scroll_per_px = scroll_per_px;
-        let bar_size_pct = ((confine_size - space_size) / confine_size) * 100.0;
 
-        let bar_offset_pct = ((target_state.scroll / scroll_per_px) / confine_size) * 100.0;
         let mut bar_style = self.bar.style_copy();
         let mut target_style = self.props.target.style_copy();
         let mut target_style_update = false;
 
         match self.props.axis {
             ScrollAxis::X => {
-                if target_style.scroll_x != target_state.scroll {
+                if !ulps_eq(target_style.scroll_x, target_state.scroll, 4) {
                     target_style.scroll_x = target_state.scroll;
                     target_style_update = true;
-
-                    bar_style.pos_from_l = Percent(bar_offset_pct);
-                    bar_style.width = Percent(bar_size_pct);
                 }
+
+                bar_style.pos_from_l = Percent(bar_offset_pct);
+                bar_style.width = Percent(bar_size_pct);
             },
             ScrollAxis::Y => {
-                if target_style.scroll_y != target_state.scroll {
+                if !ulps_eq(target_style.scroll_y, target_state.scroll, 4) {
                     target_style.scroll_y = target_state.scroll;
                     target_style_update = true;
-
-                    bar_style.pos_from_t = Percent(bar_offset_pct);
-                    bar_style.height = Percent(bar_size_pct);
                 }
+
+                bar_style.pos_from_t = Percent(bar_offset_pct);
+                bar_style.height = Percent(bar_size_pct);
             },
         }
 
@@ -1003,7 +1043,7 @@ impl ScrollBar {
             }
         }
 
-        if self.theme.roundness.is_some() {
+        if let Some(border_radius) = self.theme.roundness {
             match self.props.axis {
                 ScrollAxis::X => {
                     bar_style.border_radius_tl = PctOfHeight(50.0);
@@ -1017,6 +1057,58 @@ impl ScrollBar {
                     bar_style.border_radius_bl = PctOfWidth(50.0);
                     bar_style.border_radius_br = PctOfWidth(50.0);
                 },
+            }
+
+            // TODO: This is a workaround!
+            //       Since Bin's don't take into account border radius when cropping, this tries
+            //       to guess the container's border radius, so it still displays correctly.
+
+            let unit_val_is_zero =
+                |val: basalt::interface::UnitValue| val.px_width([100.0; 2]).unwrap_or(0.0) == 0.0;
+
+            match (
+                self.props.placement.pos_from_t.is_defined(),
+                self.props.placement.pos_from_b.is_defined(),
+                self.props.placement.pos_from_l.is_defined(),
+                self.props.placement.pos_from_r.is_defined(),
+            ) {
+                (false, true, true, true) => {
+                    if unit_val_is_zero(self.props.placement.pos_from_l) {
+                        container_style.border_radius_bl = Pixels(border_radius);
+                    }
+
+                    if unit_val_is_zero(self.props.placement.pos_from_r) {
+                        container_style.border_radius_br = Pixels(border_radius);
+                    }
+                },
+                (true, false, true, true) => {
+                    if unit_val_is_zero(self.props.placement.pos_from_l) {
+                        container_style.border_radius_tl = Pixels(border_radius);
+                    }
+
+                    if unit_val_is_zero(self.props.placement.pos_from_r) {
+                        container_style.border_radius_tr = Pixels(border_radius);
+                    }
+                },
+                (true, true, false, true) => {
+                    if unit_val_is_zero(self.props.placement.pos_from_t) {
+                        container_style.border_radius_tr = Pixels(border_radius);
+                    }
+
+                    if unit_val_is_zero(self.props.placement.pos_from_b) {
+                        container_style.border_radius_br = Pixels(border_radius);
+                    }
+                },
+                (true, true, true, false) => {
+                    if unit_val_is_zero(self.props.placement.pos_from_t) {
+                        container_style.border_radius_tl = Pixels(border_radius);
+                    }
+
+                    if unit_val_is_zero(self.props.placement.pos_from_b) {
+                        container_style.border_radius_bl = Pixels(border_radius);
+                    }
+                },
+                _ => (), // TODO: ?
             }
         }
 

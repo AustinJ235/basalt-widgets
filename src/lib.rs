@@ -17,6 +17,8 @@ mod scroll_bar;
 mod select;
 mod spin_button;
 mod switch_button;
+mod text_editor;
+mod text_hooks;
 mod theme;
 mod toggle_button;
 
@@ -35,6 +37,7 @@ pub use self::scroll_bar::{ScrollAxis, ScrollBar};
 pub use self::select::Select;
 pub use self::spin_button::SpinButton;
 pub use self::switch_button::SwitchButton;
+pub use self::text_editor::TextEditor;
 pub use self::theme::{Theme, ThemeColors};
 pub use self::toggle_button::ToggleButton;
 
@@ -42,7 +45,7 @@ pub use self::toggle_button::ToggleButton;
 pub trait WidgetContainer: Sized {
     fn container_bin(&self) -> &Arc<Bin>;
 
-    fn create_widget(&self) -> WidgetBuilder<Self> {
+    fn create_widget(&self) -> WidgetBuilder<'_, Self> {
         WidgetBuilder::from(self)
     }
 
@@ -61,5 +64,19 @@ impl WidgetContainer for Arc<Bin> {
 impl WidgetContainer for &Arc<Bin> {
     fn container_bin(&self) -> &Arc<Bin> {
         *self
+    }
+}
+
+fn ulps_eq(a: f32, b: f32, tol: u32) -> bool {
+    if a.is_nan() || b.is_nan() {
+        false
+    } else if a.is_sign_positive() != b.is_sign_positive() {
+        a == b
+    } else {
+        let a_bits = a.to_bits();
+        let b_bits = b.to_bits();
+        let max = a_bits.max(b_bits);
+        let min = a_bits.min(b_bits);
+        (max - min) <= tol
     }
 }

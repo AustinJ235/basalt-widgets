@@ -9,6 +9,7 @@ pub use crate::scroll_bar::ScrollBarBuilder;
 pub use crate::select::SelectBuilder;
 pub use crate::spin_button::SpinButtonBuilder;
 pub use crate::switch_button::SwitchButtonBuilder;
+pub use crate::text_editor::TextEditorBuilder;
 pub use crate::toggle_button::ToggleButtonBuilder;
 use crate::{Theme, WidgetContainer, WidgetPlacement};
 
@@ -110,5 +111,10 @@ where
         I: Ord + Copy + Send + 'static,
     {
         SelectBuilder::with_builder(self)
+    }
+
+    /// Transition into building a [`TextEditor`](crate::TextEditor)
+    pub fn text_editor(self) -> TextEditorBuilder<'a, C> {
+        TextEditorBuilder::with_builder(self)
     }
 }
