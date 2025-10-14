@@ -22,6 +22,7 @@ pub struct Properties {
     pub allow_cursor_to_selection: bool,
 }
 
+#[allow(dead_code)]
 impl Properties {
     pub const CODE_EDITOR: Self = Self {
         single_line: false,

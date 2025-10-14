@@ -5,6 +5,5 @@ edition = "2024"
 publish = false
 
 [dependencies]
-# basalt = { git = "https://github.com/AustinJ235/basalt.git", rev = "8db8129" }
-basalt = { path = "../basalt", features = ["deadlock_detection"] }
+basalt = { git = "https://github.com/AustinJ235/basalt.git", rev = "8db8129" }
 parking_lot = "0.12"

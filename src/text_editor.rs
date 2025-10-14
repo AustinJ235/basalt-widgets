@@ -3,7 +3,6 @@ use std::sync::Arc;
 use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{Bin, BinPostUpdate, BinStyle, Position, TextAttrs, TextBody, TextSpan};
 use basalt::interface::TextCursor;
-use basalt::interface::TextBodyGuard;
 
 use crate::builder::WidgetBuilder;
 use crate::{ScrollAxis, ScrollBar, Theme, WidgetContainer, WidgetPlacement, text_hooks, ulps_eq};
