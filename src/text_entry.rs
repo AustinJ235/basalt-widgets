@@ -92,6 +92,16 @@ where
             None,
         );
 
+        text_entry.entry.on_focus_lost(move |target, _| {
+            let entry = target.into_bin().unwrap();
+
+            entry.style_modify(|style| {
+                style.scroll_x = 0.0;
+            });
+
+            Default::default()
+        });
+
         text_entry.style_update(self.text);
         text_entry
     }
@@ -144,8 +154,18 @@ impl TextEntry {
         }
     }
 
-    fn check_cursor_in_view(&self, _entry_bpu: &BinPostUpdate, _cursor_bounds: [f32; 4]) {
-        // TODO:
+    fn check_cursor_in_view(&self, entry_bpu: &BinPostUpdate, cursor_bounds: [f32; 4]) {
+        let scroll = if cursor_bounds[0] < entry_bpu.optimal_content_bounds[0] {
+            entry_bpu.optimal_content_bounds[0] - cursor_bounds[0]
+        } else if cursor_bounds[1] > entry_bpu.optimal_content_bounds[1] {
+            entry_bpu.optimal_content_bounds[1] - cursor_bounds[1]
+        } else {
+            return;
+        };
+
+        self.entry.style_modify(|style| {
+            style.scroll_x += scroll;
+        });
     }
 
     fn style_update(&self, text: String) {
