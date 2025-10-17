@@ -168,6 +168,12 @@ fn main() {
             })
             .build();
 
+        let _text_entry = background
+            .create_widget()
+            .text_entry()
+            .with_text("Enter text here...")
+            .build();
+
         let _text_area = background
             .create_widget()
             .text_editor()

@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use basalt::interface::UnitValue::Pixels;
-use basalt::interface::{Bin, BinPostUpdate, BinStyle, Position, TextAttrs, TextBody, TextSpan};
-use basalt::interface::TextCursor;
+use basalt::interface::{
+    Bin, BinPostUpdate, BinStyle, Position, TextAttrs, TextBody, TextCursor, TextSpan,
+};
 
 use crate::builder::WidgetBuilder;
 use crate::{ScrollAxis, ScrollBar, Theme, WidgetContainer, WidgetPlacement, text_hooks, ulps_eq};
@@ -159,17 +160,17 @@ impl TextEditor {
     /// Obtain the value as a [`String`](String).
     pub fn value(&self) -> String {
         let text_body = self.editor.text_body();
-        
+
         match text_body.select_all() {
             Some(selection) => text_body.selection_string(selection),
-            None => String::new()
+            None => String::new(),
         }
     }
 
     /// Set the value.
     pub fn set_value<V>(&self, value: V)
     where
-        V: Into<String>
+        V: Into<String>,
     {
         self.editor.style_modify(|style| {
             style.text_body.spans = vec![TextSpan::from(value.into())];

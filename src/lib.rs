@@ -18,6 +18,7 @@ mod select;
 mod spin_button;
 mod switch_button;
 mod text_editor;
+mod text_entry;
 mod text_hooks;
 mod theme;
 mod toggle_button;
@@ -38,6 +39,7 @@ pub use self::select::Select;
 pub use self::spin_button::SpinButton;
 pub use self::switch_button::SwitchButton;
 pub use self::text_editor::TextEditor;
+pub use self::text_entry::TextEntry;
 pub use self::theme::{Theme, ThemeColors};
 pub use self::toggle_button::ToggleButton;
 
