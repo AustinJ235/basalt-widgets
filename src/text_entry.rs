@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use basalt::input::InputHookCtrl;
 use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{
     Bin, BinPostUpdate, BinStyle, Position, TextAttrs, TextBody, TextCursor, TextHoriAlign,
@@ -92,10 +93,46 @@ where
             None,
         );
 
-        text_entry.entry.on_focus_lost(move |target, _| {
-            let entry = target.into_bin().unwrap();
+        let text_entry_wk = Arc::downgrade(&text_entry);
 
-            entry.style_modify(|style| {
+        text_entry.entry.on_focus(move |_, _| {
+            let text_entry = match text_entry_wk.upgrade() {
+                Some(some) => some,
+                None => return InputHookCtrl::Remove,
+            };
+
+            let theme = &text_entry.theme;
+
+            if theme.border.is_some() {
+                text_entry.entry.style_modify(|style| {
+                    style.border_color_t = theme.colors.accent2;
+                    style.border_color_b = theme.colors.accent2;
+                    style.border_color_l = theme.colors.accent2;
+                    style.border_color_r = theme.colors.accent2;
+                });
+            }
+
+            Default::default()
+        });
+
+        let text_entry_wk = Arc::downgrade(&text_entry);
+
+        text_entry.entry.on_focus_lost(move |_, _| {
+            let text_entry = match text_entry_wk.upgrade() {
+                Some(some) => some,
+                None => return InputHookCtrl::Remove,
+            };
+
+            let theme = &text_entry.theme;
+
+            text_entry.entry.style_modify(|style| {
+                if theme.border.is_some() {
+                    style.border_color_t = theme.colors.border1;
+                    style.border_color_b = theme.colors.border1;
+                    style.border_color_l = theme.colors.border1;
+                    style.border_color_r = theme.colors.border1;
+                }
+
                 style.scroll_x = 0.0;
             });
 

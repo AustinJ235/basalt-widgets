@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use basalt::input::InputHookCtrl;
 use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{
     Bin, BinPostUpdate, BinStyle, Position, TextAttrs, TextBody, TextCursor, TextSpan,
@@ -140,6 +141,50 @@ where
                 }
             })),
         );
+
+        let text_editor_wk = Arc::downgrade(&text_editor);
+
+        text_editor.editor.on_focus(move |_, _| {
+            let text_editor = match text_editor_wk.upgrade() {
+                Some(some) => some,
+                None => return InputHookCtrl::Remove,
+            };
+
+            let theme = &text_editor.theme;
+
+            if theme.border.is_some() {
+                text_editor.container.style_modify(|style| {
+                    style.border_color_t = theme.colors.accent2;
+                    style.border_color_b = theme.colors.accent2;
+                    style.border_color_l = theme.colors.accent2;
+                    style.border_color_r = theme.colors.accent2;
+                });
+            }
+
+            Default::default()
+        });
+
+        let text_editor_wk = Arc::downgrade(&text_editor);
+
+        text_editor.editor.on_focus_lost(move |_, _| {
+            let text_editor = match text_editor_wk.upgrade() {
+                Some(some) => some,
+                None => return InputHookCtrl::Remove,
+            };
+
+            let theme = &text_editor.theme;
+
+            if theme.border.is_some() {
+                text_editor.container.style_modify(|style| {
+                    style.border_color_t = theme.colors.border1;
+                    style.border_color_b = theme.colors.border1;
+                    style.border_color_l = theme.colors.border1;
+                    style.border_color_r = theme.colors.border1;
+                });
+            }
+
+            Default::default()
+        });
 
         text_editor.style_update(Some(self.text_body));
         text_editor
