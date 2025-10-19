@@ -5,7 +5,7 @@ use std::sync::atomic::{self, AtomicBool};
 use std::time::Duration;
 
 use basalt::image::ImageKey;
-use basalt::input::MouseButton;
+use basalt::input::{InputHookCtrl, MouseButton};
 use basalt::interface::UnitValue::{
     PctOfHeight, PctOfHeightOffset, PctOfWidth, PctOfWidthOffset, Percent, Pixels,
 };
@@ -242,25 +242,31 @@ where
             }),
         });
 
-        let cb_scroll_bar = scroll_bar.clone();
+        let scroll_bar_wk = Arc::downgrade(&scroll_bar);
 
         scroll_bar.props.target.on_update(move |_, _| {
-            cb_scroll_bar.refresh();
+            if let Some(scroll_bar) = scroll_bar_wk.upgrade() {
+                scroll_bar.refresh();
+            }
         });
 
-        let cb_scroll_bar = scroll_bar.clone();
+        let scroll_bar_wk = Arc::downgrade(&scroll_bar);
 
         scroll_bar.props.target.on_children_added(move |_, _| {
-            cb_scroll_bar.refresh();
+            if let Some(scroll_bar) = scroll_bar_wk.upgrade() {
+                scroll_bar.refresh();
+            }
         });
 
-        let cb_scroll_bar = scroll_bar.clone();
+        let scroll_bar_wk = Arc::downgrade(&scroll_bar);
 
         scroll_bar.props.target.on_children_removed(move |_, _| {
-            cb_scroll_bar.refresh();
+            if let Some(scroll_bar) = scroll_bar_wk.upgrade() {
+                scroll_bar.refresh();
+            }
         });
 
-        let cb_scroll_bar = scroll_bar.clone();
+        let scroll_bar_wk = Arc::downgrade(&scroll_bar);
 
         window
             .basalt_ref()
@@ -270,15 +276,20 @@ where
             .on_scroll()
             .upper_blocks(true)
             .call(move |_, _, scroll_y, scroll_x| {
-                match cb_scroll_bar.props.axis {
+                let scroll_bar = match scroll_bar_wk.upgrade() {
+                    Some(some) => some,
+                    None => return InputHookCtrl::Remove,
+                };
+
+                match scroll_bar.props.axis {
                     ScrollAxis::X => {
                         if scroll_x != 0.0 {
-                            cb_scroll_bar.scroll(scroll_x * cb_scroll_bar.props.step);
+                            scroll_bar.scroll(scroll_x * scroll_bar.props.step);
                         }
                     },
                     ScrollAxis::Y => {
                         if scroll_y != 0.0 {
-                            cb_scroll_bar.scroll(scroll_y * cb_scroll_bar.props.step);
+                            scroll_bar.scroll(scroll_y * scroll_bar.props.step);
                         }
                     },
                 }
@@ -288,7 +299,7 @@ where
             .finish()
             .unwrap();
 
-        let cb_scroll_bar = scroll_bar.clone();
+        let scroll_bar_wk = Arc::downgrade(&scroll_bar);
 
         window
             .basalt_ref()
@@ -298,15 +309,20 @@ where
             .on_scroll()
             .upper_blocks(true)
             .call(move |_, _, scroll_y, scroll_x| {
-                match cb_scroll_bar.props.axis {
+                let scroll_bar = match scroll_bar_wk.upgrade() {
+                    Some(some) => some,
+                    None => return InputHookCtrl::Remove,
+                };
+
+                match scroll_bar.props.axis {
                     ScrollAxis::X => {
                         if scroll_x != 0.0 {
-                            cb_scroll_bar.scroll(scroll_x * cb_scroll_bar.props.step);
+                            scroll_bar.scroll(scroll_x * scroll_bar.props.step);
                         }
                     },
                     ScrollAxis::Y => {
                         if scroll_y != 0.0 {
-                            cb_scroll_bar.scroll(scroll_y * cb_scroll_bar.props.step);
+                            scroll_bar.scroll(scroll_y * scroll_bar.props.step);
                         }
                     },
                 }
@@ -317,20 +333,25 @@ where
             .unwrap();
 
         let bar_held = Arc::new(AtomicBool::new(false));
-        let cb_scroll_bar = scroll_bar.clone();
+        let scroll_bar_wk = Arc::downgrade(&scroll_bar);
         let cb_bar_held = bar_held.clone();
 
         scroll_bar
             .bar
             .on_press(MouseButton::Left, move |_, w_state, _| {
+                let scroll_bar = match scroll_bar_wk.upgrade() {
+                    Some(some) => some,
+                    None => return InputHookCtrl::Remove,
+                };
+
                 let [cursor_x, cursor_y] = w_state.cursor_pos();
 
-                let cursor_start = match cb_scroll_bar.props.axis {
+                let cursor_start = match scroll_bar.props.axis {
                     ScrollAxis::X => cursor_x,
                     ScrollAxis::Y => cursor_y,
                 };
 
-                let state = cb_scroll_bar.state.lock();
+                let state = scroll_bar.state.lock();
                 state.smooth.borrow_mut().run = false;
 
                 let mut drag_state = state.drag.borrow_mut();
@@ -351,19 +372,24 @@ where
             });
 
         let cb_bar_held = bar_held;
-        let cb_scroll_bar = scroll_bar.clone();
+        let scroll_bar_wk = Arc::downgrade(&scroll_bar);
 
         scroll_bar
             .container
             .attach_input_hook(window.on_cursor(move |_, w_state, _| {
+                let scroll_bar = match scroll_bar_wk.upgrade() {
+                    Some(some) => some,
+                    None => return InputHookCtrl::Remove,
+                };
+
                 if cb_bar_held.load(atomic::Ordering::SeqCst) {
                     let [cursor_x, cursor_y] = w_state.cursor_pos();
-                    let state = cb_scroll_bar.state.lock();
+                    let state = scroll_bar.state.lock();
 
                     let jump_to = {
                         let drag_state = state.drag.borrow_mut();
 
-                        let delta = match cb_scroll_bar.props.axis {
+                        let delta = match scroll_bar.props.axis {
                             ScrollAxis::X => cursor_x - drag_state.cursor_start,
                             ScrollAxis::Y => cursor_y - drag_state.cursor_start,
                         };
@@ -371,22 +397,27 @@ where
                         drag_state.scroll_start + (delta * drag_state.scroll_per_px)
                     };
 
-                    cb_scroll_bar.jump_to(jump_to);
+                    scroll_bar.jump_to(jump_to);
                 }
 
                 Default::default()
             }));
 
-        let cb_scroll_bar = scroll_bar.clone();
+        let scroll_bar_wk = Arc::downgrade(&scroll_bar);
 
         scroll_bar
             .confine
             .on_press(MouseButton::Left, move |_, w_state, _| {
-                let [cursor_x, cursor_y] = w_state.cursor_pos();
-                let bar_bpu = cb_scroll_bar.bar.post_update();
-                let state = cb_scroll_bar.state.lock();
+                let scroll_bar = match scroll_bar_wk.upgrade() {
+                    Some(some) => some,
+                    None => return InputHookCtrl::Remove,
+                };
 
-                let delta = match cb_scroll_bar.props.axis {
+                let [cursor_x, cursor_y] = w_state.cursor_pos();
+                let bar_bpu = scroll_bar.bar.post_update();
+                let state = scroll_bar.state.lock();
+
+                let delta = match scroll_bar.props.axis {
                     ScrollAxis::X => {
                         cursor_x - (((bar_bpu.tri[0] - bar_bpu.tli[0]) / 2.0) + bar_bpu.tli[0])
                     },
@@ -398,11 +429,11 @@ where
                 let scroll_to =
                     state.target.borrow().scroll + (delta * state.drag.borrow().scroll_per_px);
 
-                cb_scroll_bar.scroll_to(scroll_to);
+                scroll_bar.scroll_to(scroll_to);
                 Default::default()
             });
 
-        let cb_scroll_bar = scroll_bar.clone();
+        let scroll_bar_wk = Arc::downgrade(&scroll_bar);
 
         button_hooks(
             &scroll_bar.upright,
@@ -413,11 +444,13 @@ where
                 ..Default::default()
             },
             move |_| {
-                cb_scroll_bar.scroll(-cb_scroll_bar.props.step);
+                if let Some(scroll_bar) = scroll_bar_wk.upgrade() {
+                    scroll_bar.scroll(-scroll_bar.props.step);
+                }
             },
         );
 
-        let cb_scroll_bar = scroll_bar.clone();
+        let scroll_bar_wk = Arc::downgrade(&scroll_bar);
 
         button_hooks(
             &scroll_bar.downleft,
@@ -428,7 +461,9 @@ where
                 ..Default::default()
             },
             move |_| {
-                cb_scroll_bar.scroll(cb_scroll_bar.props.step);
+                if let Some(scroll_bar) = scroll_bar_wk.upgrade() {
+                    scroll_bar.scroll(scroll_bar.props.step);
+                }
             },
         );
 
