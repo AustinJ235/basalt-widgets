@@ -3,14 +3,14 @@ use std::sync::Arc;
 use basalt::input::InputHookCtrl;
 use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{
-    Bin, BinPostUpdate, BinStyle, Position, TextAttrs, TextBody, TextCursor, TextSpan,
+    Bin, BinPostUpdate, BinStyle, FontFamily, Position, TextAttrs, TextBody, TextCursor, TextSpan,
 };
 
 use crate::builder::WidgetBuilder;
 use crate::{ScrollAxis, ScrollBar, Theme, WidgetContainer, WidgetPlacement, text_hooks, ulps_eq};
 
-/// Builder for [`TextEditor`]
-pub struct TextEditorBuilder<'a, C> {
+/// Builder for [`CodeEditor`]
+pub struct CodeEditorBuilder<'a, C> {
     widget: WidgetBuilder<'a, C>,
     props: Properties,
     text_body: TextBody,
@@ -29,7 +29,7 @@ impl Properties {
     }
 }
 
-impl<'a, C> TextEditorBuilder<'a, C>
+impl<'a, C> CodeEditorBuilder<'a, C>
 where
     C: WidgetContainer,
 {
@@ -39,14 +39,13 @@ where
                 builder
                     .placement
                     .take()
-                    .unwrap_or_else(|| TextEditor::default_placement(&builder.theme)),
+                    .unwrap_or_else(|| CodeEditor::default_placement(&builder.theme)),
             ),
             text_body: TextBody {
                 base_attrs: TextAttrs {
                     color: builder.theme.colors.text1a,
                     height: Pixels(builder.theme.text_height),
-                    font_family: builder.theme.font_family.clone(),
-                    font_weight: builder.theme.font_weight,
+                    font_family: FontFamily::Monospace,
                     ..Default::default()
                 },
                 spans: vec![TextSpan::default()],
@@ -71,8 +70,8 @@ where
         self
     }
 
-    /// Finish building the [`TextEditor`].
-    pub fn build(self) -> Arc<TextEditor> {
+    /// Finish building the [`CodeEditor`].
+    pub fn build(self) -> Arc<CodeEditor> {
         let window = self
             .widget
             .container
@@ -119,7 +118,7 @@ where
             .container_bin()
             .add_child(container.clone());
 
-        let text_editor = Arc::new(TextEditor {
+        let code_editor = Arc::new(CodeEditor {
             theme: self.widget.theme,
             props: self.props,
             container,
@@ -128,37 +127,37 @@ where
             h_scroll_b,
         });
 
-        let text_editor_wk1 = Arc::downgrade(&text_editor);
-        let text_editor_wk2 = Arc::downgrade(&text_editor);
+        let code_editor_wk1 = Arc::downgrade(&code_editor);
+        let code_editor_wk2 = Arc::downgrade(&code_editor);
 
         text_hooks::create(
-            text_hooks::Properties::EDITOR,
-            text_editor.editor.clone(),
-            text_editor.theme.clone(),
+            text_hooks::Properties::CODE_EDITOR,
+            code_editor.editor.clone(),
+            code_editor.theme.clone(),
             Some(Arc::new(move |editor_bpu, cursor_bounds| {
-                if let Some(text_editor) = text_editor_wk1.upgrade() {
-                    text_editor.check_cursor_in_view(editor_bpu, cursor_bounds);
+                if let Some(code_editor) = code_editor_wk1.upgrade() {
+                    code_editor.check_cursor_in_view(editor_bpu, cursor_bounds);
                 }
             })),
             Some(Arc::new(move |amt| {
-                if let Some(text_editor) = text_editor_wk2.upgrade() {
-                    text_editor.v_scroll_b.scroll(amt);
+                if let Some(code_editor) = code_editor_wk2.upgrade() {
+                    code_editor.v_scroll_b.scroll(amt);
                 }
             })),
         );
 
-        let text_editor_wk = Arc::downgrade(&text_editor);
+        let code_editor_wk = Arc::downgrade(&code_editor);
 
-        text_editor.editor.on_focus(move |_, _| {
-            let text_editor = match text_editor_wk.upgrade() {
+        code_editor.editor.on_focus(move |_, _| {
+            let code_editor = match code_editor_wk.upgrade() {
                 Some(some) => some,
                 None => return InputHookCtrl::Remove,
             };
 
-            let theme = &text_editor.theme;
+            let theme = &code_editor.theme;
 
             if theme.border.is_some() {
-                text_editor.container.style_modify(|style| {
+                code_editor.container.style_modify(|style| {
                     style.border_color_t = theme.colors.accent2;
                     style.border_color_b = theme.colors.accent2;
                     style.border_color_l = theme.colors.accent2;
@@ -169,18 +168,18 @@ where
             Default::default()
         });
 
-        let text_editor_wk = Arc::downgrade(&text_editor);
+        let code_editor_wk = Arc::downgrade(&code_editor);
 
-        text_editor.editor.on_focus_lost(move |_, _| {
-            let text_editor = match text_editor_wk.upgrade() {
+        code_editor.editor.on_focus_lost(move |_, _| {
+            let code_editor = match code_editor_wk.upgrade() {
                 Some(some) => some,
                 None => return InputHookCtrl::Remove,
             };
 
-            let theme = &text_editor.theme;
+            let theme = &code_editor.theme;
 
             if theme.border.is_some() {
-                text_editor.container.style_modify(|style| {
+                code_editor.container.style_modify(|style| {
                     style.border_color_t = theme.colors.border1;
                     style.border_color_b = theme.colors.border1;
                     style.border_color_l = theme.colors.border1;
@@ -191,13 +190,13 @@ where
             Default::default()
         });
 
-        text_editor.style_update(Some(self.text_body));
-        text_editor
+        code_editor.style_update(Some(self.text_body));
+        code_editor
     }
 }
 
 /// Text editor widget.
-pub struct TextEditor {
+pub struct CodeEditor {
     theme: Theme,
     props: Properties,
     container: Arc<Bin>,
@@ -206,7 +205,7 @@ pub struct TextEditor {
     h_scroll_b: Arc<ScrollBar>,
 }
 
-impl TextEditor {
+impl CodeEditor {
     /// Obtain the value as a [`String`](String).
     pub fn value(&self) -> String {
         let text_body = self.editor.text_body();

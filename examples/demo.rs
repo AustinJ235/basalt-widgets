@@ -187,6 +187,17 @@ fn main() {
             )
             .build();
 
+        let _code_editor = background
+            .create_widget()
+            .code_editor()
+            .with_text(
+                r#"fn main() {
+    println!("Hello World!");
+}
+"#,
+            )
+            .build();
+
         // -- ScrollBar Testing -- //
 
         let scroll_area_container = window.new_bin();

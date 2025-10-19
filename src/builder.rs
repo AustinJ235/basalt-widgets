@@ -2,6 +2,7 @@
 
 pub use crate::button::ButtonBuilder;
 pub use crate::check_box::CheckBoxBuilder;
+pub use crate::code_editor::CodeEditorBuilder;
 pub use crate::progress_bar::ProgressBarBuilder;
 pub use crate::radio_button::RadioButtonBuilder;
 pub use crate::scaler::ScalerBuilder;
@@ -122,5 +123,10 @@ where
     /// Transition into building a [`TextEntry`](crate::TextEntry)
     pub fn text_entry(self) -> TextEntryBuilder<'a, C> {
         TextEntryBuilder::with_builder(self)
+    }
+
+    /// Transition into building a [`CodeEditor`](crate::CodeEditor)
+    pub fn code_editor(self) -> CodeEditorBuilder<'a, C> {
+        CodeEditorBuilder::with_builder(self)
     }
 }
