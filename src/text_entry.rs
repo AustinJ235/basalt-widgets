@@ -202,16 +202,22 @@ impl TextEntry {
     }
 
     fn check_cursor_in_view(&self, entry_bpu: &BinPostUpdate, cursor_bounds: [f32; 4]) {
-        let scroll = if cursor_bounds[0] < entry_bpu.optimal_content_bounds[0] {
-            entry_bpu.optimal_content_bounds[0] - cursor_bounds[0]
-        } else if cursor_bounds[1] > entry_bpu.optimal_content_bounds[1] {
-            entry_bpu.optimal_content_bounds[1] - cursor_bounds[1]
+        let scroll_x = -entry_bpu.content_offset[0];
+        let entry_width = entry_bpu.optimal_inner_bounds[1] - entry_bpu.optimal_inner_bounds[0];
+        let text_x_offset = entry_bpu.optimal_inner_bounds[0] + scroll_x;
+        let cursor_min_x = cursor_bounds[0] - text_x_offset;
+        let cursor_max_x = cursor_bounds[0] - text_x_offset;
+
+        let scroll_to = if cursor_min_x - scroll_x - self.theme.spacing < 0.0 {
+            cursor_min_x - self.theme.spacing
+        } else if cursor_max_x - scroll_x + self.theme.spacing > entry_width {
+            cursor_max_x + self.theme.spacing - entry_width
         } else {
             return;
         };
 
         self.entry.style_modify(|style| {
-            style.scroll_x += scroll;
+            style.scroll_x = scroll_to;
         });
     }
 
