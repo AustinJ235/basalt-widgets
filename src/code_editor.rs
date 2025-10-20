@@ -3,7 +3,8 @@ use std::sync::Arc;
 use basalt::input::InputHookCtrl;
 use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{
-    Bin, BinPostUpdate, BinStyle, FontFamily, Position, TextAttrs, TextBody, TextCursor, TextSpan,
+    Bin, BinPostUpdate, BinStyle, FontFamily, Position, TextAttrs, TextBody, TextCursor,
+    TextHoriAlign, TextSpan,
 };
 
 use crate::builder::WidgetBuilder;
@@ -79,11 +80,15 @@ where
             .window()
             .expect("The widget container must have an associated window.");
 
-        let mut bins = window.new_bins(2).into_iter();
+        let mut bins = window.new_bins(4).into_iter();
         let container = bins.next().unwrap();
         let editor = bins.next().unwrap();
+        let status_bar = bins.next().unwrap();
+        let line_numbers = bins.next().unwrap();
 
         container.add_child(editor.clone());
+        container.add_child(status_bar.clone());
+        container.add_child(line_numbers.clone());
 
         let sb_size = match ScrollBar::default_placement(&self.widget.theme, ScrollAxis::Y).width {
             Pixels(px) => px,
@@ -91,12 +96,14 @@ where
         };
 
         let border_size = self.widget.theme.border.unwrap_or(0.0);
+        let status_bar_h = self.widget.theme.base_size + self.widget.theme.spacing;
+        let line_numbers_w = self.widget.theme.base_size * 2.0;
 
         let v_scroll_b = container
             .create_widget()
             .with_theme(self.widget.theme.clone())
             .with_placement(WidgetPlacement {
-                pos_from_b: Pixels(sb_size + border_size),
+                pos_from_b: Pixels(sb_size + (border_size * 2.0) + status_bar_h),
                 ..ScrollBar::default_placement(&self.widget.theme, ScrollAxis::Y)
             })
             .scroll_bar(&editor)
@@ -104,9 +111,14 @@ where
 
         let h_scroll_b = container
             .create_widget()
-            .with_theme(self.widget.theme.clone())
+            .with_theme(Theme {
+                //border: None,
+                ..self.widget.theme.clone()
+            })
             .with_placement(WidgetPlacement {
+                pos_from_l: Pixels(line_numbers_w + border_size),
                 pos_from_r: Pixels(sb_size + border_size),
+                pos_from_b: Pixels(status_bar_h + border_size),
                 ..ScrollBar::default_placement(&self.widget.theme, ScrollAxis::X)
             })
             .scroll_bar(&editor)
@@ -123,6 +135,8 @@ where
             props: self.props,
             container,
             editor,
+            status_bar,
+            line_numbers,
             v_scroll_b,
             h_scroll_b,
         });
@@ -190,6 +204,50 @@ where
             Default::default()
         });
 
+        let code_editor_wk = Arc::downgrade(&code_editor);
+
+        code_editor.editor.on_update(move |_, _| {
+            let code_editor = match code_editor_wk.upgrade() {
+                Some(some) => some,
+                None => return,
+            };
+
+            let text_body = code_editor.editor.text_body();
+
+            let status = match text_body.cursor_line_column(text_body.cursor(), false) {
+                Some([line_i, col_i]) => format!("Ln: {}, Col: {}", line_i + 1, col_i + 1),
+                None => String::from("Cursor: None"),
+            };
+
+            let line_count = text_body.line_count(false).unwrap_or(0);
+            let scroll_y = text_body.style_inspect(|style| style.scroll_y);
+            drop(text_body);
+
+            code_editor.status_bar.style_modify(|style| {
+                style.text_body.spans[0].text = status;
+            });
+
+            code_editor.line_numbers.style_modify(|style| {
+                let mut text = String::new();
+
+                for i in 0..line_count {
+                    if i == line_count - 1 {
+                        text.push_str(format!("{}", i + 1).as_str());
+                    } else {
+                        text.push_str(format!("{}\n", i + 1).as_str());
+                    }
+                }
+
+                style.text_body.spans[0].text = text;
+
+                // TODO: This should be done when the text body is updated within the on_update
+                //       callback so it happens same frame. This has a one frame delay!
+                style.scroll_y = scroll_y;
+            });
+
+            Default::default()
+        });
+
         code_editor.style_update(Some(self.text_body));
         code_editor
     }
@@ -201,6 +259,8 @@ pub struct CodeEditor {
     props: Properties,
     container: Arc<Bin>,
     editor: Arc<Bin>,
+    status_bar: Arc<Bin>,
+    line_numbers: Arc<Bin>,
     v_scroll_b: Arc<ScrollBar>,
     h_scroll_b: Arc<ScrollBar>,
 }
@@ -230,8 +290,8 @@ impl CodeEditor {
 
     /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
     pub fn default_placement(theme: &Theme) -> WidgetPlacement {
-        let height = theme.spacing + (theme.base_size * 5.0);
-        let width = height * 3.0;
+        let height = theme.spacing + (theme.base_size * 9.0);
+        let width = theme.spacing + (theme.base_size * 16.0);
 
         WidgetPlacement {
             position: Position::Floating,
@@ -306,23 +366,79 @@ impl CodeEditor {
 
     fn style_update(&self, text_body_op: Option<TextBody>) {
         let mut container_style = self.props.placement.clone().into_style();
-        container_style.back_color = self.theme.colors.back2;
+        container_style.back_color = self.theme.colors.back3;
         let mut editor_style = BinStyle::default();
 
         if let Some(text_body) = text_body_op {
             editor_style.text_body = text_body;
         }
 
+        let status_bar_h = self.theme.base_size + self.theme.spacing;
+        let line_numbers_w = self.theme.base_size * 2.0;
+        let border_size = self.theme.border.unwrap_or(0.0);
+
         editor_style.position = Position::Relative;
         editor_style.pos_from_t = Pixels(0.0);
-        editor_style.pos_from_b = ScrollBar::default_placement(&self.theme, ScrollAxis::X).height;
-        editor_style.pos_from_l = Pixels(0.0);
+        editor_style.pos_from_b = ScrollBar::default_placement(&self.theme, ScrollAxis::X)
+            .height
+            .offset_pixels(self.theme.base_size + self.theme.spacing + (border_size * 2.0));
+        editor_style.pos_from_l = Pixels(line_numbers_w + border_size);
         editor_style.pos_from_r = ScrollBar::default_placement(&self.theme, ScrollAxis::Y).width;
         editor_style.back_color = self.theme.colors.back2;
         editor_style.padding_t = Pixels(self.theme.spacing);
         editor_style.padding_b = Pixels(self.theme.spacing);
         editor_style.padding_l = Pixels(self.theme.spacing);
         editor_style.padding_r = Pixels(self.theme.spacing);
+
+        let mut status_bar_style = BinStyle {
+            pos_from_b: Pixels(0.0),
+            pos_from_l: Pixels(0.0),
+            pos_from_r: Pixels(0.0),
+            height: Pixels(status_bar_h),
+            padding_t: Pixels(self.theme.spacing / 2.0),
+            padding_b: Pixels(self.theme.spacing / 2.0),
+            padding_l: Pixels(self.theme.spacing),
+            padding_r: Pixels(self.theme.spacing),
+            back_color: self.theme.colors.back2,
+            text_body: TextBody {
+                base_attrs: TextAttrs {
+                    color: self.theme.colors.text1a,
+                    height: Pixels(self.theme.text_height),
+                    font_family: FontFamily::Monospace,
+                    ..Default::default()
+                },
+                hori_align: TextHoriAlign::Right,
+                spans: vec![TextSpan::default()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut line_numbers_style = BinStyle {
+            pos_from_t: Pixels(0.0),
+            pos_from_b: ScrollBar::default_placement(&self.theme, ScrollAxis::X)
+                .height
+                .offset_pixels(self.theme.base_size + self.theme.spacing + (border_size * 2.0)),
+            pos_from_l: Pixels(0.0),
+            width: Pixels(line_numbers_w),
+            back_color: self.theme.colors.back2,
+            padding_t: Pixels(self.theme.spacing),
+            padding_b: Pixels(self.theme.spacing),
+            padding_l: Pixels(self.theme.spacing / 2.0),
+            padding_r: Pixels(self.theme.spacing / 2.0),
+            text_body: TextBody {
+                base_attrs: TextAttrs {
+                    color: self.theme.colors.text1a,
+                    height: Pixels(self.theme.text_height),
+                    font_family: FontFamily::Monospace,
+                    ..Default::default()
+                },
+                hori_align: TextHoriAlign::Right,
+                spans: vec![TextSpan::default()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
 
         if let Some(border_size) = self.theme.border {
             container_style.border_size_t = Pixels(border_size);
@@ -333,6 +449,17 @@ impl CodeEditor {
             container_style.border_color_b = self.theme.colors.border1;
             container_style.border_color_l = self.theme.colors.border1;
             container_style.border_color_r = self.theme.colors.border1;
+
+            editor_style.border_size_l = Pixels(border_size);
+            editor_style.border_color_l = self.theme.colors.border2;
+            editor_style.border_size_b = Pixels(border_size);
+            editor_style.border_color_b = self.theme.colors.border2;
+
+            line_numbers_style.border_size_b = Pixels(border_size);
+            line_numbers_style.border_color_b = self.theme.colors.border2;
+
+            status_bar_style.border_size_t = Pixels(border_size);
+            status_bar_style.border_color_t = self.theme.colors.border2;
         }
 
         if let Some(border_radius) = self.theme.roundness {
@@ -340,12 +467,18 @@ impl CodeEditor {
             container_style.border_radius_tr = Pixels(border_radius);
             container_style.border_radius_bl = Pixels(border_radius);
             container_style.border_radius_br = Pixels(border_radius);
-            editor_style.border_radius_tl = Pixels(border_radius);
+
+            status_bar_style.border_radius_bl = Pixels(border_radius);
+            status_bar_style.border_radius_br = Pixels(border_radius);
+
+            line_numbers_style.border_radius_tl = Pixels(border_radius);
         }
 
         Bin::style_update_batch([
             (&self.container, container_style),
             (&self.editor, editor_style),
+            (&self.status_bar, status_bar_style),
+            (&self.line_numbers, line_numbers_style),
         ]);
     }
 }

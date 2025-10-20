@@ -194,13 +194,23 @@ pub fn create(
 
     let cb_hooks = hooks.clone();
 
-    editor.on_cursor(move |target, window_state, _| {
-        if window_state.is_key_pressed(MouseButton::Left) {
-            cb_hooks.proc_cursor_move(target.into_bin().unwrap(), window_state.cursor_pos())
-        } else {
-            Default::default()
-        }
-    });
+    hooks
+        .basalt
+        .input_ref()
+        .hook()
+        .bin(&editor)
+        .on_cursor()
+        .require_on_top(true)
+        .require_focused(true)
+        .call(move |target, window_state, _| {
+            if window_state.is_key_pressed(MouseButton::Left) {
+                cb_hooks.proc_cursor_move(target.into_bin().unwrap(), window_state.cursor_pos())
+            } else {
+                Default::default()
+            }
+        })
+        .finish()
+        .unwrap();
 
     for key in [
         Qwerty::ArrowLeft,

@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use basalt::interface::BinStyle;
 use basalt::interface::UnitValue::Pixels;
-use basalt::interface::{BinStyle, Position};
 use basalt::interval::IntvlHookCtrl;
 use basalt::render::{MSAA, Renderer, RendererError};
 use basalt::window::WindowOptions;
@@ -18,7 +18,7 @@ fn main() {
             .window_manager_ref()
             .create(WindowOptions {
                 title: String::from("basalt-widgets"),
-                inner_size: Some([400; 2]),
+                inner_size: Some([720, 360]),
                 ..WindowOptions::default()
             })
             .unwrap();
@@ -197,69 +197,6 @@ fn main() {
 "#,
             )
             .build();
-
-        // -- ScrollBar Testing -- //
-
-        let scroll_area_container = window.new_bin();
-        let scroll_area = window.new_bin();
-        background.add_child(scroll_area_container.clone());
-        scroll_area_container.add_child(scroll_area.clone());
-
-        scroll_area_container
-            .style_update(BinStyle {
-                position: Position::Floating,
-                width: Pixels(350.0),
-                height: Pixels(300.0),
-                margin_t: Pixels(theme.spacing),
-                margin_b: Pixels(theme.spacing),
-                margin_l: Pixels(theme.spacing),
-                margin_r: Pixels(theme.spacing),
-                border_size_t: Pixels(1.0),
-                border_size_b: Pixels(1.0),
-                border_size_l: Pixels(1.0),
-                border_size_r: Pixels(1.0),
-                border_color_t: theme.colors.border1,
-                border_color_b: theme.colors.border1,
-                border_color_l: theme.colors.border1,
-                border_color_r: theme.colors.border1,
-                ..Default::default()
-            })
-            .expect_valid();
-
-        scroll_area
-            .style_update(BinStyle {
-                pos_from_t: Pixels(0.0),
-                pos_from_b: Pixels(0.0),
-                pos_from_l: Pixels(0.0),
-                pos_from_r: Pixels((theme.base_size / 1.5).ceil() + 1.0),
-                ..Default::default()
-            })
-            .expect_valid();
-
-        let dummy_bins = window.new_bins(20);
-
-        for (i, bin) in dummy_bins.iter().enumerate() {
-            scroll_area.add_child(bin.clone());
-
-            bin.style_update(BinStyle {
-                pos_from_t: Pixels(10.0 + (i as f32 * 85.0)),
-                pos_from_l: Pixels(10.0),
-                pos_from_r: Pixels(10.0),
-                margin_b: Pixels(10.0),
-                height: Pixels(75.0),
-                back_color: theme.colors.back3,
-                text_body: format!("{}", i).into(),
-                ..Default::default()
-            })
-            .expect_valid();
-        }
-
-        let _scroll_bar = scroll_area_container
-            .create_widget()
-            .scroll_bar(&scroll_area)
-            .build();
-
-        // -- //
 
         let mut renderer = Renderer::new(window).unwrap();
         renderer.interface_only().msaa(MSAA::X8);

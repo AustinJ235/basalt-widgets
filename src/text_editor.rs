@@ -231,8 +231,8 @@ impl TextEditor {
 
     /// Obtain the default [`WidgetPlacement`](`WidgetPlacement`) given a [`Theme`](`Theme`).
     pub fn default_placement(theme: &Theme) -> WidgetPlacement {
-        let height = theme.spacing + (theme.base_size * 5.0);
-        let width = height * 3.0;
+        let height = theme.spacing + (theme.base_size * 9.0);
+        let width = theme.spacing + (theme.base_size * 16.0);
 
         WidgetPlacement {
             position: Position::Floating,
