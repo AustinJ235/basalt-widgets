@@ -65,7 +65,7 @@ pub fn create(
         let editor_wk = Arc::downgrade(&editor);
         let mut cursor_visible = false;
 
-        Some(editor.basalt_ref().interval_ref().do_every(
+        let intvl_id = editor.basalt_ref().interval_ref().do_every(
             Duration::from_millis(500),
             None,
             move |elapsed| {
@@ -90,7 +90,10 @@ pub fn create(
 
                 Default::default()
             },
-        ))
+        );
+
+        editor.attach_intvl_hook(intvl_id);
+        Some(intvl_id)
     } else {
         None
     };
@@ -116,8 +119,14 @@ pub fn create(
 
         let cb_hooks = hooks.clone();
 
-        editor.on_focus_lost(move |_, _| {
+        editor.on_focus_lost(move |target, _| {
             cb_hooks.pause_cursor_blink();
+
+            target.into_bin().unwrap().style_modify(|style| {
+                style.text_body.cursor_color.a = 0.0;
+                style.text_body.selection = None;
+            });
+
             Default::default()
         });
     }
@@ -185,13 +194,23 @@ pub fn create(
 
     let cb_hooks = hooks.clone();
 
-    editor.on_cursor(move |target, window_state, _| {
-        if window_state.is_key_pressed(MouseButton::Left) {
-            cb_hooks.proc_cursor_move(target.into_bin().unwrap(), window_state.cursor_pos())
-        } else {
-            Default::default()
-        }
-    });
+    hooks
+        .basalt
+        .input_ref()
+        .hook()
+        .bin(&editor)
+        .on_cursor()
+        .require_on_top(true)
+        .require_focused(true)
+        .call(move |target, window_state, _| {
+            if window_state.is_key_pressed(MouseButton::Left) {
+                cb_hooks.proc_cursor_move(target.into_bin().unwrap(), window_state.cursor_pos())
+            } else {
+                Default::default()
+            }
+        })
+        .finish()
+        .unwrap();
 
     for key in [
         Qwerty::ArrowLeft,

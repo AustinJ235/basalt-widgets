@@ -2,6 +2,7 @@
 
 pub use crate::button::ButtonBuilder;
 pub use crate::check_box::CheckBoxBuilder;
+pub use crate::code_editor::CodeEditorBuilder;
 pub use crate::progress_bar::ProgressBarBuilder;
 pub use crate::radio_button::RadioButtonBuilder;
 pub use crate::scaler::ScalerBuilder;
@@ -10,6 +11,7 @@ pub use crate::select::SelectBuilder;
 pub use crate::spin_button::SpinButtonBuilder;
 pub use crate::switch_button::SwitchButtonBuilder;
 pub use crate::text_editor::TextEditorBuilder;
+pub use crate::text_entry::TextEntryBuilder;
 pub use crate::toggle_button::ToggleButtonBuilder;
 use crate::{Theme, WidgetContainer, WidgetPlacement};
 
@@ -116,5 +118,15 @@ where
     /// Transition into building a [`TextEditor`](crate::TextEditor)
     pub fn text_editor(self) -> TextEditorBuilder<'a, C> {
         TextEditorBuilder::with_builder(self)
+    }
+
+    /// Transition into building a [`TextEntry`](crate::TextEntry)
+    pub fn text_entry(self) -> TextEntryBuilder<'a, C> {
+        TextEntryBuilder::with_builder(self)
+    }
+
+    /// Transition into building a [`CodeEditor`](crate::CodeEditor)
+    pub fn code_editor(self) -> CodeEditorBuilder<'a, C> {
+        CodeEditorBuilder::with_builder(self)
     }
 }
