@@ -135,8 +135,18 @@ where
             text_hooks::Properties::EDITOR,
             text_editor.editor.clone(),
             text_editor.theme.clone(),
-            Some(Arc::new(move |editor_bpu, cursor_bounds| {
-                if let Some(text_editor) = text_editor_wk1.upgrade() {
+            Some(Arc::new(move |updated| {
+                let text_hooks::Updated {
+                    cursor: _,
+                    cursor_bounds,
+                    body_line_count: _,
+                    cursor_line_col: _,
+                    editor_bpu,
+                } = updated;
+
+                if let Some(cursor_bounds) = cursor_bounds
+                    && let Some(text_editor) = text_editor_wk1.upgrade()
+                {
                     text_editor.check_cursor_in_view(editor_bpu, cursor_bounds);
                 }
             })),

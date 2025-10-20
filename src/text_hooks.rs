@@ -54,11 +54,20 @@ impl Properties {
     };
 }
 
+#[allow(dead_code)]
+pub struct Updated<'a> {
+    pub cursor: TextCursor,
+    pub cursor_bounds: Option<[f32; 4]>,
+    pub body_line_count: usize,
+    pub cursor_line_col: Option<[usize; 2]>,
+    pub editor_bpu: &'a BinPostUpdate,
+}
+
 pub fn create(
     properties: Properties,
     editor: Arc<Bin>,
     theme: Theme,
-    check_cursor_in_view: Option<Arc<dyn Fn(&BinPostUpdate, [f32; 4]) + Send + Sync + 'static>>,
+    updated: Option<Arc<dyn Fn(Updated) + Send + Sync + 'static>>,
     scroll_v: Option<Arc<dyn Fn(f32) + Send + Sync + 'static>>,
 ) {
     let intvl_blink_id = if properties.display_cursor {
@@ -105,7 +114,7 @@ pub fn create(
         modifiers: AtomicU8::new(0),
         intvl_blink_id,
         clipboard: Mutex::new(String::new()),
-        check_cursor_in_view,
+        updated,
         scroll_v,
     });
 
@@ -309,7 +318,7 @@ struct Hooks {
     modifiers: AtomicU8,
     intvl_blink_id: Option<IntvlHookID>,
     clipboard: Mutex<String>, // TODO: This will be in basalt itself.
-    check_cursor_in_view: Option<Arc<dyn Fn(&BinPostUpdate, [f32; 4]) + Send + Sync + 'static>>,
+    updated: Option<Arc<dyn Fn(Updated) + Send + Sync + 'static>>,
     scroll_v: Option<Arc<dyn Fn(f32) + Send + Sync + 'static>>,
 }
 
@@ -1150,12 +1159,24 @@ impl Hooks {
     fn updated(self: &Arc<Self>, text_body: &TextBodyGuard) -> InputHookCtrl {
         self.reset_cursor_blink();
 
-        if let Some(check_cursor_in_view) = self.check_cursor_in_view.clone() {
-            if let Some(cursor_bounds) = text_body.cursor_bounds(text_body.cursor()) {
-                text_body.bin_on_update(move |_, editor_bpu| {
-                    check_cursor_in_view(&editor_bpu, cursor_bounds);
+        if let Some(updated) = self.updated.clone() {
+            let cursor = text_body.cursor();
+            let cursor_bounds = text_body.cursor_bounds(cursor);
+            let body_line_count = text_body
+                .line_count(self.properties.use_display_lines)
+                .unwrap_or(0);
+            let cursor_line_col =
+                text_body.cursor_line_column(cursor, self.properties.use_display_lines);
+
+            text_body.bin_on_update(move |_, editor_bpu| {
+                updated(Updated {
+                    cursor,
+                    cursor_bounds,
+                    body_line_count,
+                    cursor_line_col,
+                    editor_bpu,
                 });
-            }
+            });
         }
 
         Default::default()

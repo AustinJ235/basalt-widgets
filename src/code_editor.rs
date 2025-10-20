@@ -4,7 +4,7 @@ use basalt::input::InputHookCtrl;
 use basalt::interface::UnitValue::Pixels;
 use basalt::interface::{
     Bin, BinPostUpdate, BinStyle, FontFamily, Position, TextAttrs, TextBody, TextCursor,
-    TextHoriAlign, TextSpan,
+    TextHoriAlign, TextSpan, TextWrap,
 };
 
 use crate::builder::WidgetBuilder;
@@ -49,6 +49,7 @@ where
                     font_family: FontFamily::Monospace,
                     ..Default::default()
                 },
+                text_wrap: TextWrap::None,
                 spans: vec![TextSpan::default()],
                 ..Default::default()
             },
@@ -111,10 +112,7 @@ where
 
         let h_scroll_b = container
             .create_widget()
-            .with_theme(Theme {
-                //border: None,
-                ..self.widget.theme.clone()
-            })
+            .with_theme(self.widget.theme.clone())
             .with_placement(WidgetPlacement {
                 pos_from_l: Pixels(line_numbers_w + border_size),
                 pos_from_r: Pixels(sb_size + border_size),
@@ -148,10 +146,46 @@ where
             text_hooks::Properties::CODE_EDITOR,
             code_editor.editor.clone(),
             code_editor.theme.clone(),
-            Some(Arc::new(move |editor_bpu, cursor_bounds| {
-                if let Some(code_editor) = code_editor_wk1.upgrade() {
+            Some(Arc::new(move |updated| {
+                let text_hooks::Updated {
+                    cursor: _,
+                    cursor_bounds,
+                    body_line_count,
+                    cursor_line_col,
+                    editor_bpu,
+                } = updated;
+
+                let code_editor = match code_editor_wk1.upgrade() {
+                    Some(some) => some,
+                    None => return,
+                };
+
+                if let Some(cursor_bounds) = cursor_bounds {
                     code_editor.check_cursor_in_view(editor_bpu, cursor_bounds);
                 }
+
+                let status = match cursor_line_col {
+                    Some([line_i, col_i]) => format!("Ln: {}, Col: {}", line_i + 1, col_i + 1),
+                    None => String::from("Cursor: None"),
+                };
+
+                code_editor.status_bar.style_modify(|style| {
+                    style.text_body.spans[0].text = status;
+                });
+
+                code_editor.line_numbers.style_modify(|style| {
+                    let mut text = String::new();
+
+                    for i in 0..body_line_count {
+                        if i == body_line_count - 1 {
+                            text.push_str(format!("{}", i + 1).as_str());
+                        } else {
+                            text.push_str(format!("{}\n", i + 1).as_str());
+                        }
+                    }
+
+                    style.text_body.spans[0].text = text;
+                });
             })),
             Some(Arc::new(move |amt| {
                 if let Some(code_editor) = code_editor_wk2.upgrade() {
@@ -159,6 +193,28 @@ where
                 }
             })),
         );
+
+        let code_editor_wk = Arc::downgrade(&code_editor);
+
+        code_editor.editor.on_update(move |_, editor_bpu| {
+            let code_editor = match code_editor_wk.upgrade() {
+                Some(some) => some,
+                None => return,
+            };
+
+            let scroll_y = -editor_bpu.content_offset[1];
+
+            if let Some(mut style) = code_editor.line_numbers.style_inspect(|style| {
+                if style.scroll_y != scroll_y {
+                    Some(style.clone())
+                } else {
+                    None
+                }
+            }) {
+                style.scroll_y = scroll_y;
+                code_editor.line_numbers.style_update(style).expect_valid();
+            }
+        });
 
         let code_editor_wk = Arc::downgrade(&code_editor);
 
@@ -199,51 +255,11 @@ where
                     style.border_color_l = theme.colors.border1;
                     style.border_color_r = theme.colors.border1;
                 });
+
+                code_editor.status_bar.style_modify(|style| {
+                    style.text_body.spans[0].text = format!("Cursor: None");
+                });
             }
-
-            Default::default()
-        });
-
-        let code_editor_wk = Arc::downgrade(&code_editor);
-
-        code_editor.editor.on_update(move |_, _| {
-            let code_editor = match code_editor_wk.upgrade() {
-                Some(some) => some,
-                None => return,
-            };
-
-            let text_body = code_editor.editor.text_body();
-
-            let status = match text_body.cursor_line_column(text_body.cursor(), false) {
-                Some([line_i, col_i]) => format!("Ln: {}, Col: {}", line_i + 1, col_i + 1),
-                None => String::from("Cursor: None"),
-            };
-
-            let line_count = text_body.line_count(false).unwrap_or(0);
-            let scroll_y = text_body.style_inspect(|style| style.scroll_y);
-            drop(text_body);
-
-            code_editor.status_bar.style_modify(|style| {
-                style.text_body.spans[0].text = status;
-            });
-
-            code_editor.line_numbers.style_modify(|style| {
-                let mut text = String::new();
-
-                for i in 0..line_count {
-                    if i == line_count - 1 {
-                        text.push_str(format!("{}", i + 1).as_str());
-                    } else {
-                        text.push_str(format!("{}\n", i + 1).as_str());
-                    }
-                }
-
-                style.text_body.spans[0].text = text;
-
-                // TODO: This should be done when the text body is updated within the on_update
-                //       callback so it happens same frame. This has a one frame delay!
-                style.scroll_y = scroll_y;
-            });
 
             Default::default()
         });
@@ -408,11 +424,29 @@ impl CodeEditor {
                     ..Default::default()
                 },
                 hori_align: TextHoriAlign::Right,
-                spans: vec![TextSpan::default()],
-                ..Default::default()
+                ..TextBody::from("Cursor: None")
             },
             ..Default::default()
         };
+
+        let num_lines = editor_style
+            .text_body
+            .spans
+            .iter()
+            .map(|span| {
+                span.text
+                    .chars()
+                    .map(|c| (c == '\n') as usize)
+                    .sum::<usize>()
+            })
+            .sum::<usize>()
+            + 1;
+
+        let mut line_numbers = String::new();
+
+        for i in 0..num_lines {
+            line_numbers.push_str(format!("{}\n", i + 1).as_str());
+        }
 
         let mut line_numbers_style = BinStyle {
             pos_from_t: Pixels(0.0),
@@ -434,8 +468,8 @@ impl CodeEditor {
                     ..Default::default()
                 },
                 hori_align: TextHoriAlign::Right,
-                spans: vec![TextSpan::default()],
-                ..Default::default()
+                text_wrap: TextWrap::None,
+                ..TextBody::from(line_numbers)
             },
             ..Default::default()
         };

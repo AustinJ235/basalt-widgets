@@ -85,9 +85,19 @@ where
             text_hooks::Properties::ENTRY,
             text_entry.entry.clone(),
             text_entry.theme.clone(),
-            Some(Arc::new(move |entry_bpu, cursor_bounds| {
-                if let Some(text_entry) = text_entry_wk.upgrade() {
-                    text_entry.check_cursor_in_view(entry_bpu, cursor_bounds);
+            Some(Arc::new(move |updated| {
+                let text_hooks::Updated {
+                    cursor: _,
+                    cursor_bounds,
+                    body_line_count: _,
+                    cursor_line_col: _,
+                    editor_bpu,
+                } = updated;
+
+                if let Some(cursor_bounds) = cursor_bounds
+                    && let Some(text_entry) = text_entry_wk.upgrade()
+                {
+                    text_entry.check_cursor_in_view(editor_bpu, cursor_bounds);
                 }
             })),
             None,
