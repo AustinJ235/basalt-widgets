@@ -158,7 +158,7 @@ dependencies = [
 [[package]]
 name = "basalt"
 version = "0.21.0"
-source = "git+https://github.com/AustinJ235/basalt.git?rev=91663eb#91663eb0668a3ab1122a682d9627330bfa533b63"
+source = "git+https://github.com/AustinJ235/basalt.git?rev=22741b5#22741b5ee0bec4b0749fc46fc33a6ad8f3e78d9b"
 dependencies = [
  "cosmic-text",
  "curl",
