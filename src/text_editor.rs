@@ -257,61 +257,37 @@ impl TextEditor {
     }
 
     fn check_cursor_in_view(&self, editor_bpu: &BinPostUpdate, mut cursor_bounds: [f32; 4]) {
-        let editor_size = [
-            editor_bpu.optimal_inner_bounds[1] - editor_bpu.optimal_inner_bounds[0],
-            editor_bpu.optimal_inner_bounds[3] - editor_bpu.optimal_inner_bounds[2],
-        ];
-
-        let text_offset = [
-            editor_bpu.optimal_inner_bounds[0] + editor_bpu.content_offset[0],
-            editor_bpu.optimal_inner_bounds[2] + editor_bpu.content_offset[1],
-        ];
-
-        cursor_bounds[0] -= text_offset[0];
-        cursor_bounds[1] -= text_offset[0];
-        cursor_bounds[2] -= text_offset[1];
-        cursor_bounds[3] -= text_offset[1];
+        let view_bounds = editor_bpu.optimal_content_bounds;
 
         let target_scroll = [
             self.h_scroll_b.target_scroll(),
             self.v_scroll_b.target_scroll(),
         ];
 
-        let editor_overflow = [
-            self.h_scroll_b.target_overflow(),
-            self.v_scroll_b.target_overflow(),
-        ];
-
-        let scroll_to_x_op = if cursor_bounds[0] - target_scroll[0] - self.theme.spacing < 0.0 {
-            Some(cursor_bounds[0] - self.theme.spacing)
-        } else if cursor_bounds[1] - target_scroll[0] + self.theme.spacing > editor_size[0] {
-            Some(cursor_bounds[1] + self.theme.spacing - editor_size[0])
-        } else {
-            None
-        };
-
-        let scroll_to_y_op = if cursor_bounds[2] - target_scroll[1] - self.theme.spacing < 0.0 {
-            Some(cursor_bounds[2] - self.theme.spacing)
-        } else if cursor_bounds[3] - target_scroll[1] + self.theme.spacing > editor_size[1] {
-            Some(cursor_bounds[3] + self.theme.spacing - editor_size[1])
-        } else {
-            None
-        };
-
-        if let Some(mut scroll_to_x) = scroll_to_x_op {
-            scroll_to_x = scroll_to_x.clamp(0.0, editor_overflow[0]);
-
-            if !ulps_eq(scroll_to_x, target_scroll[0], 8) {
-                self.h_scroll_b.scroll_to(scroll_to_x);
-            }
+        if !ulps_eq(-editor_bpu.content_offset[0], target_scroll[0], 4) {
+            cursor_bounds[0] -= editor_bpu.content_offset[0];
+            cursor_bounds[1] -= editor_bpu.content_offset[0];
+            cursor_bounds[0] -= target_scroll[0];
+            cursor_bounds[1] -= target_scroll[0];
         }
 
-        if let Some(mut scroll_to_y) = scroll_to_y_op {
-            scroll_to_y = scroll_to_y.clamp(0.0, editor_overflow[1]);
+        if !ulps_eq(-editor_bpu.content_offset[1], target_scroll[1], 4) {
+            cursor_bounds[2] -= editor_bpu.content_offset[1];
+            cursor_bounds[3] -= editor_bpu.content_offset[1];
+            cursor_bounds[2] -= target_scroll[1];
+            cursor_bounds[3] -= target_scroll[1];
+        }
 
-            if !ulps_eq(scroll_to_y, target_scroll[1], 8) {
-                self.v_scroll_b.scroll_to(scroll_to_y);
-            }
+        if cursor_bounds[0] < view_bounds[0] {
+            self.h_scroll_b.scroll_to(cursor_bounds[0] + target_scroll[0] - view_bounds[0]);
+        } else if cursor_bounds[1] > view_bounds[1] {
+            self.h_scroll_b.scroll_to(cursor_bounds[1] + target_scroll[0] - view_bounds[1]);
+        }
+
+        if cursor_bounds[2] < view_bounds[2] {
+            self.v_scroll_b.scroll_to(cursor_bounds[2] + target_scroll[1] - view_bounds[2]);
+        } else if cursor_bounds[3] > view_bounds[3] {
+            self.v_scroll_b.scroll_to(cursor_bounds[3] + target_scroll[1] - view_bounds[3]);
         }
     }
 
