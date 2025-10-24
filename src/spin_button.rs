@@ -2,17 +2,17 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use basalt::image::ImageKey;
-use basalt::input::{Qwerty, WindowState};
+use basalt::input::{InputHookCtrl, Qwerty, WindowState};
 use basalt::interface::UnitValue::{PctOfHeight, PctOfHeightOffset, Percent, Pixels};
 use basalt::interface::{
-    Bin, BinStyle, BinVertex, Color, Position, TextAttrs, TextBody, TextHoriAlign, TextVertAlign,
-    TextWrap, ZIndex,
+    Bin, BinPostUpdate, BinStyle, BinVertex, Color, Position, TextAttrs, TextBody, TextHoriAlign,
+    TextVertAlign, TextWrap, ZIndex,
 };
 use parking_lot::ReentrantMutex;
 
 use crate::builder::WidgetBuilder;
 use crate::button::{BtnHookColors, button_hooks};
-use crate::{Theme, WidgetContainer, WidgetPlacement};
+use crate::{Theme, WidgetContainer, WidgetPlacement, text_hooks};
 
 /// Builder for [`SpinButton`]
 pub struct SpinButtonBuilder<'a, C> {
@@ -229,58 +229,84 @@ where
             },
         );
 
-        let cb_spin_button = spin_button.clone();
+        let spin_button_wk = Arc::downgrade(&spin_button);
 
-        spin_button.entry.on_character(move |_, _, c| {
-            if c.is_new_line() {
-                let val: i32 = cb_spin_button
+        text_hooks::create(
+            text_hooks::Properties::ENTRY,
+            spin_button.entry.clone(),
+            spin_button.theme.clone(),
+            Some(Arc::new(move |updated| {
+                let text_hooks::Updated {
+                    cursor: _,
+                    cursor_bounds,
+                    body_line_count: _,
+                    cursor_line_col: _,
+                    editor_bpu,
+                } = updated;
+
+                if let Some(cursor_bounds) = cursor_bounds
+                    && let Some(spin_button) = spin_button_wk.upgrade()
+                {
+                    spin_button.check_cursor_in_view(editor_bpu, cursor_bounds);
+                }
+            })),
+            None,
+        );
+
+        let spin_button_wk = Arc::downgrade(&spin_button);
+
+        window
+            .basalt_ref()
+            .input_ref()
+            .hook()
+            .bin(&spin_button.entry)
+            .on_character()
+            .weight(1)
+            .call(move |_, _, c| {
+                let spin_button = match spin_button_wk.upgrade() {
+                    Some(some) => some,
+                    None => return InputHookCtrl::Remove,
+                };
+
+                let val = match c.0 {
+                    '\r' | '\n' => {
+                        spin_button
+                            .entry
+                            .style_inspect(|style| style.text_body.spans[0].text.parse::<i32>())
+                            .unwrap_or(*spin_button.state.lock().val.borrow())
+                    },
+                    '\u{1b}' => *spin_button.state.lock().val.borrow(),
+                    _ => return Default::default(),
+                };
+
+                let window_id = match spin_button.entry.window() {
+                    Some(window) => window.id(),
+                    None => return Default::default(),
+                };
+
+                spin_button
                     .entry
-                    .style_inspect(|style| style.text_body.spans[0].text.parse::<i32>())
-                    .unwrap_or(cb_spin_button.props.val);
-
-                cb_spin_button
-                    .container
                     .basalt_ref()
                     .input_ref()
-                    .clear_bin_focus(cb_spin_button.container.window().unwrap().id());
+                    .clear_bin_focus(window_id);
 
-                cb_spin_button.set(val);
-            } else if c.is_backspace() {
-                let mut entry_style = cb_spin_button.entry.style_copy();
-                entry_style.text_body.spans[0].text.pop();
-
-                cb_spin_button
-                    .entry
-                    .style_update(entry_style)
-                    .expect_valid();
-            } else if c.0.is_numeric() {
-                let mut entry_style = cb_spin_button.entry.style_copy();
-                entry_style.text_body.spans[0].text.push(c.0);
-
-                cb_spin_button
-                    .entry
-                    .style_update(entry_style)
-                    .expect_valid();
-            }
-
-            Default::default()
-        });
+                spin_button.set(val);
+                InputHookCtrl::RetainNoPass
+            })
+            .finish()
+            .unwrap();
 
         let cb_spin_button = spin_button.clone();
 
         spin_button.entry.on_focus(move |_, _| {
             let border_size = cb_spin_button.theme.border.unwrap_or(1.0);
 
-            cb_spin_button
-                .entry
-                .style_update(BinStyle {
-                    border_size_t: Pixels(border_size),
-                    border_size_b: Pixels(border_size),
-                    border_size_l: Pixels(border_size),
-                    border_size_r: Pixels(border_size),
-                    ..cb_spin_button.entry.style_copy()
-                })
-                .expect_valid();
+            cb_spin_button.entry.style_modify(|style| {
+                style.border_size_t = Pixels(border_size);
+                style.border_size_b = Pixels(border_size);
+                style.border_size_l = Pixels(border_size);
+                style.border_size_r = Pixels(border_size);
+            });
 
             Default::default()
         });
@@ -288,16 +314,15 @@ where
         let cb_spin_button = spin_button.clone();
 
         spin_button.entry.on_focus_lost(move |_, _| {
-            cb_spin_button
-                .entry
-                .style_update(BinStyle {
-                    border_size_t: Default::default(),
-                    border_size_b: Default::default(),
-                    border_size_l: Default::default(),
-                    border_size_r: Default::default(),
-                    ..cb_spin_button.entry.style_copy()
-                })
-                .expect_valid();
+            cb_spin_button.entry.style_modify(|style| {
+                style.border_size_t = Default::default();
+                style.border_size_b = Default::default();
+                style.border_size_l = Default::default();
+                style.border_size_r = Default::default();
+                style.scroll_x = 0.0;
+                style.text_body.spans =
+                    vec![format!("{}", *cb_spin_button.state.lock().val.borrow()).into()];
+            });
 
             Default::default()
         });
@@ -344,7 +369,7 @@ impl SpinButton {
         *state.val.borrow_mut() = val;
 
         self.entry.style_modify(|style| {
-            style.text_body.spans[0].text = format!("{}", val);
+            style.text_body.spans = vec![format!("{}", val).into()];
         });
 
         if let Ok(mut on_change_cbs) = state.on_change.try_borrow_mut() {
@@ -425,11 +450,30 @@ impl SpinButton {
         }
     }
 
+    fn check_cursor_in_view(&self, entry_bpu: &BinPostUpdate, cursor_bounds: [f32; 4]) {
+        let view_bounds = entry_bpu.optimal_content_bounds;
+
+        let scroll_x_op = if cursor_bounds[0] < view_bounds[0] {
+            Some(cursor_bounds[0] - entry_bpu.content_offset[0] - view_bounds[0])
+        } else if cursor_bounds[1] > view_bounds[1] {
+            Some(cursor_bounds[1] - entry_bpu.content_offset[0] - view_bounds[1])
+        } else {
+            None
+        };
+
+        if let Some(scroll_x) = scroll_x_op {
+            self.entry.style_modify(|style| {
+                style.scroll_x = scroll_x;
+            });
+        }
+    }
+
     fn style_update(self: &Arc<Self>) {
         let border_size = self.theme.border.unwrap_or(0.0);
         let mut container_style = self.props.placement.clone().into_style();
 
         let mut entry_style = BinStyle {
+            position: Position::Anchor,
             z_index: ZIndex::Offset(1),
             pos_from_t: Pixels(0.0),
             pos_from_l: Pixels(0.0),

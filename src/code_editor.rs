@@ -344,15 +344,19 @@ impl CodeEditor {
         }
 
         if cursor_bounds[0] < view_bounds[0] {
-            self.h_scroll_b.scroll_to(cursor_bounds[0] + target_scroll[0] - view_bounds[0]);
+            self.h_scroll_b
+                .scroll_to(cursor_bounds[0] + target_scroll[0] - view_bounds[0]);
         } else if cursor_bounds[1] > view_bounds[1] {
-            self.h_scroll_b.scroll_to(cursor_bounds[1] + target_scroll[0] - view_bounds[1]);
+            self.h_scroll_b
+                .scroll_to(cursor_bounds[1] + target_scroll[0] - view_bounds[1]);
         }
 
         if cursor_bounds[2] < view_bounds[2] {
-            self.v_scroll_b.scroll_to(cursor_bounds[2] + target_scroll[1] - view_bounds[2]);
+            self.v_scroll_b
+                .scroll_to(cursor_bounds[2] + target_scroll[1] - view_bounds[2]);
         } else if cursor_bounds[3] > view_bounds[3] {
-            self.v_scroll_b.scroll_to(cursor_bounds[3] + target_scroll[1] - view_bounds[3]);
+            self.v_scroll_b
+                .scroll_to(cursor_bounds[3] + target_scroll[1] - view_bounds[3]);
         }
     }
 

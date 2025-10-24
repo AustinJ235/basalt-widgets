@@ -1034,6 +1034,7 @@ impl Hooks {
                     }
                 }
             },
+            '\u{1b}' => return Default::default(),
             mut c => {
                 if c == '\r' {
                     c = '\n';
