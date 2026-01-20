@@ -1,4 +1,6 @@
-#### This repo's existance is temporary. Eventually it'll hopefully be added into [basalt](https://github.com/AustinJ235/basalt) itself.
+
+#### ~This repo's existance is temporary. Eventually it'll hopefully be added into [basalt](https://github.com/AustinJ235/basalt) itself.~
+#### Merged https://github.com/AustinJ235/basalt/pull/61
 #### These widgets are created as a proof of concept and may not work outside of demo use.
 
 State as of October 20th, 2025
